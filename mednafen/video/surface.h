@@ -8,7 +8,7 @@
 #define GREEN_SHIFT 8
 #define BLUE_SHIFT 0
 #define ALPHA_SHIFT 24
-#define MAKECOLOR(r, g, b, a) ((r << RED_SHIFT) | (g << GREEN_SHIFT) | (b << BLUE_SHIFT) | (a << ALPHA_SHIFT))
+#define MAKECOLOR(r, g, b) ((r << RED_SHIFT) | (g << GREEN_SHIFT) | (b << BLUE_SHIFT) | (0 << ALPHA_SHIFT))
 #elif defined(WANT_16BPP) && defined(FRONTEND_SUPPORTS_RGB565)
 /* 16bit color - RGB565 */
 #define RED_MASK  0xf800
@@ -20,7 +20,7 @@
 #define RED_SHIFT 11
 #define GREEN_SHIFT 5
 #define BLUE_SHIFT 0
-#define MAKECOLOR(r, g, b, a) (((r >> RED_EXPAND) << RED_SHIFT) | ((g >> GREEN_EXPAND) << GREEN_SHIFT) | ((b >> BLUE_EXPAND) << BLUE_SHIFT))
+#define MAKECOLOR(r, g, b) (((r >> RED_EXPAND) << RED_SHIFT) | ((g >> GREEN_EXPAND) << GREEN_SHIFT) | ((b >> BLUE_EXPAND) << BLUE_SHIFT))
 #elif defined(WANT_16BPP) && !defined(FRONTEND_SUPPORTS_RGB565)
 /* 16bit color - RGB555 */
 #define RED_MASK  0x7c00
@@ -32,7 +32,20 @@
 #define RED_SHIFT 10
 #define GREEN_SHIFT 5
 #define BLUE_SHIFT 0
-#define MAKECOLOR(r, g, b, a) (((r >> RED_EXPAND) << RED_SHIFT) | ((g >> GREEN_EXPAND) << GREEN_SHIFT) | ((b >> BLUE_EXPAND) << BLUE_SHIFT))
+#define MAKECOLOR(r, g, b) (((r >> RED_EXPAND) << RED_SHIFT) | ((g >> GREEN_EXPAND) << GREEN_SHIFT) | ((b >> BLUE_EXPAND) << BLUE_SHIFT))
+#elif defined(WANT_8BPP)
+#include <SDL/SDL.h>
+#include "make_color.h"
+#define RED_MASK  0
+#define GREEN_MASK 0
+#define BLUE_MASK 0
+#define RED_EXPAND 0
+#define GREEN_EXPAND 0
+#define BLUE_EXPAND 0
+#define RED_SHIFT 0
+#define GREEN_SHIFT 0
+#define BLUE_SHIFT 0
+#define MAKECOLOR(r, g, b) Make_Color(r, g, b)
 #endif
 
 typedef struct
@@ -43,6 +56,12 @@ typedef struct
 enum
 {
  MDFN_COLORSPACE_RGB = 0
+};
+
+
+struct MDFN_PaletteEntry
+{
+ uint8 r, g, b;
 };
 
 struct MDFN_PixelFormat
@@ -73,6 +92,8 @@ struct MDFN_Surface //typedef struct
       int32 pitch32; // In pixels, not in bytes.
       int32 pitchinpix;	// New name, new code should use this.
    };
+   
+   struct MDFN_PaletteEntry *palette;
 
    struct MDFN_PixelFormat format;
 };

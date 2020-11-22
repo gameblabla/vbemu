@@ -143,7 +143,7 @@ static void MakeColorLUT(void)
          ColorLUTNoGC[lr][i][1] = pow(g_prime, 2.2 / 1.0);
          ColorLUTNoGC[lr][i][2] = pow(b_prime, 2.2 / 1.0);
 
-         ColorLUT[lr][i] = MAKECOLOR((int)(r_prime * 255), (int)(g_prime * 255), (int)(b_prime * 255), 0);
+         ColorLUT[lr][i] = MAKECOLOR((int)(r_prime * 255), (int)(g_prime * 255), (int)(b_prime * 255));
       }
    }
 
@@ -168,7 +168,7 @@ static void MakeColorLUT(void)
          g_prime = pow(g, 1.0 / 2.2);
          b_prime = pow(b, 1.0 / 2.2);
 
-         AnaSlowColorLUT[l_b][r_b] = MAKECOLOR(((int)(r_prime * 255)), ((int)(g_prime * 255)), ((int)(b_prime * 255)), 0);
+         AnaSlowColorLUT[l_b][r_b] = MAKECOLOR(((int)(r_prime * 255)), ((int)(g_prime * 255)), ((int)(b_prime * 255)));
       }
    }
 }
@@ -417,7 +417,7 @@ bool VIP_Init(void)
    VBPrescale = 1;
    VBSBS_Separation = 0;
 
-   VidSettingsDirty = true;
+   VidSettingsDirty = false;
 
    return(true);
 }
@@ -951,9 +951,11 @@ void VIP_StartFrame(EmulateSpecStruct *espec)
    if(VidSettingsDirty)
    {
 #if defined(WANT_32BPP)
-	  memset(surface->pixels, 0, 768 * 448 * 4);
+	  memset(surface->pixels, 0, 384 * 224 * 4);
 #elif defined(WANT_16BPP)
-	  memset(surface->pixels16, 0, 768 * 448 * 2);
+	  memset(surface->pixels16, 0, 384 * 224 * 2);
+#elif defined(WANT_8BPP)
+	  memset(surface->pixels8, 0, 384 * 224);
 #endif
 
       VidSettingsDirty = false;

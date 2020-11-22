@@ -4,3 +4,8 @@
 *.dylib
 /old
 *.a
+*.elf
+*.opk
+*.vb
+*.out
+*.txt

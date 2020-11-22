@@ -21,8 +21,6 @@
 #include <string.h>
 
 #include <boolean.h>
-
-#include <compat/msvc.h>
 #include <retro_inline.h>
 
 #include "state.h"

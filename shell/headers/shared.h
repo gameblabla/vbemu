@@ -1,0 +1,8 @@
+#ifndef SHARED_H
+#define SHARED_H
+
+
+#define SOUND_OUTPUT_FREQUENCY 22050
+#define SOUND_SAMPLES_SIZE 1024
+
+#endif
