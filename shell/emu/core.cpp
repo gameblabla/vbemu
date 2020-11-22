@@ -997,14 +997,13 @@ void Emulation_Run(void)
 #else
 	spec.skip = 0;
 #endif
-	input_buf[0] = Read_Input();
-
 	if (spec.SoundRate != last_sound_rate)
 	{
 		spec.SoundFormatChanged = true;
 		last_sound_rate = spec.SoundRate;
 	}
 
+	input_buf[0] = Read_Input();
 	Emulate(&spec, sound_buf);
 
 	int16 *const SoundBuf = sound_buf + spec.SoundBufSizeALMS * EmulatedVB.soundchan;

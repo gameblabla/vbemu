@@ -82,11 +82,11 @@ static uint8 BRTA, BRTB, BRTC, REST;
 static uint8 Repeat;
 
 static void CopyFBColumnToTarget_Anaglyph(void) NO_INLINE;
-static void CopyFBColumnToTarget_AnaglyphSlow(void) NO_INLINE;
+/*static void CopyFBColumnToTarget_AnaglyphSlow(void) NO_INLINE;
 static void CopyFBColumnToTarget_CScope(void) NO_INLINE;
 static void CopyFBColumnToTarget_SideBySide(void) NO_INLINE;
 static void CopyFBColumnToTarget_VLI(void) NO_INLINE;
-static void CopyFBColumnToTarget_HLI(void) NO_INLINE;
+static void CopyFBColumnToTarget_HLI(void) NO_INLINE;*/
 static void (*CopyFBColumnToTarget)(void) = NULL;
 static uint32 VB3DMode;
 static uint32 VB3DReverse;
@@ -242,14 +242,14 @@ static void Recalc3DModeStuff(bool non_rgb_output)
    {
       default: 
          CopyFBColumnToTarget = CopyFBColumnToTarget_Anaglyph;
-         if(((Anaglyph_Colors[0] & 0xFF) && (Anaglyph_Colors[1] & 0xFF)) ||
+         /*if(((Anaglyph_Colors[0] & 0xFF) && (Anaglyph_Colors[1] & 0xFF)) ||
                ((Anaglyph_Colors[0] & 0xFF00) && (Anaglyph_Colors[1] & 0xFF00)) ||
                ((Anaglyph_Colors[0] & 0xFF0000) && (Anaglyph_Colors[1] & 0xFF0000)) ||
                non_rgb_output)
-            CopyFBColumnToTarget = CopyFBColumnToTarget_AnaglyphSlow;
+            CopyFBColumnToTarget = CopyFBColumnToTarget_AnaglyphSlow;*/
          break;
 
-      case VB3DMODE_CSCOPE:
+      /*case VB3DMODE_CSCOPE:
          CopyFBColumnToTarget = CopyFBColumnToTarget_CScope;
          break;
 
@@ -263,7 +263,7 @@ static void Recalc3DModeStuff(bool non_rgb_output)
 
       case VB3DMODE_HLI:
          CopyFBColumnToTarget = CopyFBColumnToTarget_HLI;
-         break;
+         break;*/
    }
    RecalcBrightnessCache();
 }
@@ -980,75 +980,20 @@ static INLINE void CopyFBColumnToTarget_Anaglyph_BASE(const bool DisplayActive_a
 
    if (DisplayActive_arg)
    {
-      if (lr)
+      for(y = 56; y; y--)
       {
-         for(y = 56; y; y--)
-         {
-            uint32 source_bits = *fb_source;
+		WIDTH_TYPE source_bits = *fb_source;
 
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               uint32 pixel  = BrightCLUT[lr][source_bits & 3];
-               *target      |= pixel;
+		for(y_sub = 4; y_sub; y_sub--)
+		{
+			WIDTH_TYPE pixel  = BrightCLUT[lr][source_bits & 3];
+			*target       = pixel;
 
-               source_bits >>= 2;
-               target       += pitchinpix;
-            }
-            fb_source++;
-         }
-      }
-      else
-      {
-         for(y = 56; y; y--)
-         {
-            uint32 source_bits = *fb_source;
-
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               uint32 pixel  = BrightCLUT[lr][source_bits & 3];
-               *target       = pixel;
-
-               source_bits >>= 2;
-               target       += pitchinpix;
-            }
-            fb_source++;
-         }
-      }
-   }
-   else
-   {
-      if (lr)
-      {
-         for(y = 56; y; y--)
-         {
-            uint32 source_bits = *fb_source;
-
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               *target      |= 0;
-
-               source_bits >>= 2;
-               target       += pitchinpix;
-            }
-            fb_source++;
-         }
-      }
-      else
-      {
-         for(y = 56; y; y--)
-         {
-            uint32 source_bits = *fb_source;
-
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               *target       = 0;
-
-               source_bits >>= 2;
-               target       += pitchinpix;
-            }
-            fb_source++;
-         }
-      }
+			source_bits >>= 2;
+			target       += pitchinpix;
+		}
+		fb_source++;
+	  }
    }
 }
 
@@ -1057,11 +1002,16 @@ static void CopyFBColumnToTarget_Anaglyph(void)
    const int lr = (DisplayRegion & 2) >> 1;
 
    if(!lr)
+   {
       CopyFBColumnToTarget_Anaglyph_BASE(DisplayActive, 0);
+   }
    else
-      CopyFBColumnToTarget_Anaglyph_BASE(DisplayActive, 1);
+   {
+     //CopyFBColumnToTarget_Anaglyph_BASE(DisplayActive, 1);
+   }
 }
 
+/*
 static uint32 AnaSlowBuf[384][224];
 
 static INLINE void CopyFBColumnToTarget_AnaglyphSlow_BASE(const bool DisplayActive_arg, const int lr)
@@ -1414,6 +1364,7 @@ static void CopyFBColumnToTarget_HLI(void)
    else
       CopyFBColumnToTarget_HLI_BASE(DisplayActive, 1, 1 ^ VB3DReverse);
 }
+*/
 
 v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
 {

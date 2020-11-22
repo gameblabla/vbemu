@@ -7,7 +7,7 @@ CXX 		= clang
 # Possible values : retrostone, rs97, rs90
 PORT = gcw0
 # Possible values : alsa, oss, portaudio
-SOUND_ENGINE = sdl
+SOUND_ENGINE = pulse
 
 #### End of Configuration
 

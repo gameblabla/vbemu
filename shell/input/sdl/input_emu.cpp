@@ -86,7 +86,5 @@ uint16_t Read_Input(void)
 	// Select
 	if (keys[option.config_buttons[9] ] == SDL_PRESSED) button |= 2048;
 	
-	
-
 	return button;
 }
