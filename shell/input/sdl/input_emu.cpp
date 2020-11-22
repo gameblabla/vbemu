@@ -35,7 +35,6 @@ uint16_t Read_Input(void)
 #endif
 					case SDLK_RCTRL:
 					case SDLK_END:
-					case SDLK_ESCAPE:
 						emulator_state = 1;
 					break;
 					default:
