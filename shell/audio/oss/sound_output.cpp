@@ -16,7 +16,7 @@ uint32_t Audio_Init()
 	uint32_t tmp = SOUND_OUTPUT_FREQUENCY;
 	int32_t err_ret;
 
-	oss_audio_fd = open("/dev/dsp", O_WRONLY | O_NONBLOCK);
+	oss_audio_fd = open("/dev/dsp", O_WRONLY);
 	if (oss_audio_fd < 0)
 	{
 		printf("Couldn't open /dev/dsp.\n");
@@ -44,7 +44,7 @@ uint32_t Audio_Init()
 	return 0;
 }
 
-void Audio_Write(int16_t* restrict buffer, uint32_t buffer_size)
+void Audio_Write(int16_t* buffer, uint32_t buffer_size)
 {
 	write(oss_audio_fd, buffer, buffer_size * 4 );
 }

@@ -335,6 +335,12 @@ static void Input_Remapping()
 	config_save();
 }
 
+#ifdef SCALING_SOFTWARE
+#define SCALING_SOFTWARE_OFFSET 1
+#else
+#define SCALING_SOFTWARE_OFFSET 0
+#endif
+
 void Menu()
 {
 	char text[50];
@@ -348,7 +354,7 @@ void Menu()
 	/* Save sram settings each time we bring up the menu */
 	SRAM_Menu(0);
 
-    while (((currentselection != 1) && (currentselection != 6)) || (!pressed))
+    while (((currentselection != 1) && (currentselection != 6-SCALING_SOFTWARE_OFFSET)) || (!pressed))
     {
         pressed = 0;
 
@@ -369,6 +375,7 @@ void Menu()
 		if (currentselection == 3) print_string(text, TextRed, 0, 5, 85, (uint16_t*)backbuffer->pixels);
 		else print_string(text, TextWhite, 0, 5, 85, (uint16_t*)backbuffer->pixels);
 
+		#ifdef SCALING_SOFTWARE
         if (currentselection == 4)
         {
 			switch(option.fullscreen)
@@ -405,11 +412,12 @@ void Menu()
 				break;
 			}
         }
+		#endif
 
-		if (currentselection == 5) print_string("Input remapping", TextRed, 0, 5, 125, (uint16_t*)backbuffer->pixels);
+		if (currentselection == 5-SCALING_SOFTWARE_OFFSET) print_string("Input remapping", TextRed, 0, 5, 125, (uint16_t*)backbuffer->pixels);
 		else print_string("Input remapping", TextWhite, 0, 5, 125, (uint16_t*)backbuffer->pixels);
 
-		if (currentselection == 6) print_string("Quit", TextRed, 0, 5, 145, (uint16_t*)backbuffer->pixels);
+		if (currentselection == 6-SCALING_SOFTWARE_OFFSET) print_string("Quit", TextRed, 0, 5, 145, (uint16_t*)backbuffer->pixels);
 		else print_string("Quit", TextWhite, 0, 5, 145, (uint16_t*)backbuffer->pixels);
 
 		print_string("Libretro Fork by gameblabla", TextWhite, 0, 5, 205, (uint16_t*)backbuffer->pixels);
@@ -424,11 +432,11 @@ void Menu()
                     case SDLK_UP:
                         currentselection--;
                         if (currentselection == 0)
-                            currentselection = 6;
+                            currentselection = 6-SCALING_SOFTWARE_OFFSET;
                         break;
                     case SDLK_DOWN:
                         currentselection++;
-                        if (currentselection == 7)
+                        if (currentselection == 7-SCALING_SOFTWARE_OFFSET)
                             currentselection = 1;
                         break;
                     case SDLK_END:
@@ -448,11 +456,13 @@ void Menu()
                             case 3:
                                 if (save_slot > 0) save_slot--;
 							break;
+							#ifdef SCALING_SOFTWARE
                             case 4:
 							option.fullscreen--;
 							if (option.fullscreen < 0)
 								option.fullscreen = upscalers_available;
 							break;
+							#endif
                         }
                         break;
                     case SDLK_RIGHT:
@@ -464,11 +474,13 @@ void Menu()
 								if (save_slot == 10)
 									save_slot = 9;
 							break;
+							#ifdef SCALING_SOFTWARE
                             case 4:
                                 option.fullscreen++;
                                 if (option.fullscreen > upscalers_available)
                                     option.fullscreen = 0;
 							break;
+							#endif
                         }
                         break;
 					default:
@@ -477,7 +489,7 @@ void Menu()
             }
             else if (Event.type == SDL_QUIT)
             {
-				currentselection = 6;
+				currentselection = 6-SCALING_SOFTWARE_OFFSET;
 				pressed = 1;
 			}
         }
@@ -486,14 +498,16 @@ void Menu()
         {
             switch(currentselection)
             {
-				case 5:
+				case 5-SCALING_SOFTWARE_OFFSET:
 					Input_Remapping();
 				break;
+				#ifdef SCALING_SOFTWARE
                 case 4 :
                     option.fullscreen++;
                     if (option.fullscreen > upscalers_available)
                         option.fullscreen = 0;
                     break;
+                #endif
                 case 2 :
                     SaveState_Menu(1, save_slot);
 					currentselection = 1;
@@ -518,7 +532,7 @@ void Menu()
     SDL_Flip(sdl_screen);
     #endif
 
-    if (currentselection == 6)
+    if (currentselection == 6-SCALING_SOFTWARE_OFFSET)
     {
         exit_vb = 1;
 	}

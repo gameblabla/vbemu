@@ -30,9 +30,9 @@ uint32_t Audio_Init()
 	return 0;
 }
 
-void Audio_Write(int16_t* restrict buffer, uint32_t buffer_size)
+void Audio_Write(int16_t* buffer, uint32_t buffer_size)
 {
-	Pa_WriteStream( apu_stream, buffer, buffer_size);
+	Pa_WriteStream( apu_stream, (uint8_t*)buffer, buffer_size);
 }
 
 void Audio_Close()

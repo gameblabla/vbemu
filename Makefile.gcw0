@@ -1,6 +1,6 @@
 PRGNAME     = vb.elf
-CC          = clang
-CXX 		= clang
+CC          = /opt/gcw0-toolchain/bin/mipsel-linux-gcc
+CXX 		= /opt/gcw0-toolchain/bin/mipsel-linux-g++
 
 #### Configuration
 
@@ -8,6 +8,9 @@ CXX 		= clang
 PORT = gcw0
 # Possible values : alsa, oss, portaudio
 SOUND_ENGINE = sdl
+
+PROFILE = APPLY
+HUGE_PAGES = 1
 
 #### End of Configuration
 
@@ -19,11 +22,20 @@ INCLUDES	+= -Imednafen -I./mednafen/vb -I./mednafen/sound -I. -Ishell/emu -Imedn
 
 DEFINES		= -DLSB_FIRST -DINLINE="inline" -DINLINE="inline" -DNDEBUG -DWANT_STEREO_SOUND
 DEFINES		+= -DMEDNAFEN_VERSION_NUMERIC=931
-DEFINES		+= -DWANT_16BPP -DFRONTEND_SUPPORTS_RGB565
+DEFINES		+= -DWANT_16BPP -DFRONTEND_SUPPORTS_RGB565 -DFRAMESKIP
 
-CFLAGS		= -O0 -g3 -fno-common -Wall -Wextra -Wunused-value $(INCLUDES) $(DEFINES)
+CFLAGS		= -Ofast -fdata-sections -ffunction-sections -mframe-header-opt -mno-fp-exceptions -mno-check-zero-division -fsingle-precision-constant -fno-common -march=mips32r2 -mtune=mips32r2 -flto
+CFLAGS		+= $(INCLUDES) $(DEFINES)
+
+ifeq ($(PROFILE), YES)
+CFLAGS 		+= -fprofile-generate=/usr/local/home/vbemu_gcda
+else ifeq ($(PROFILE), APPLY)
+CFLAGS		+= -fprofile-use -fbranch-probabilities
+endif
+
 CXXFLAGS	= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
-LDFLAGS     = -lc -lgcc -lstdc++ -lm -lSDL -lz -pthread
+LDFLAGS     = -lc -lgcc -lstdc++ -lm -lSDL -lz -Wl,--as-needed -Wl,--gc-sections -flto -s
+
 
 ifeq ($(SOUND_ENGINE), alsa)
 LDFLAGS 		+= -lasound
@@ -31,8 +43,13 @@ endif
 ifeq ($(SOUND_ENGINE), portaudio)
 LDFLAGS 		+= -lasound -lportaudio
 endif
-ifeq ($(SOUND_ENGINE), pulse)
-LDFLAGS 		+= -lpulse-simple -lportaudio
+
+ifeq ($(HUGE_PAGES), 1)
+LDFLAGS		+= -Wl,-zcommon-page-size=2097152 -Wl,-zmax-page-size=2097152 -lhugetlbfs
+endif
+
+ifeq ($(PROFILE), YES)
+LDFLAGS 	+= -lgcov
 endif
 
 # Files to be compiled
@@ -50,7 +67,10 @@ OBJS		= $(OBJ_C) $(OBJ_CPP)
 # Rules to make executable
 $(PRGNAME): $(OBJS)  
 	$(CC) $(CFLAGS) -std=gnu99 -o $(PRGNAME) $^ $(LDFLAGS)
-	
+ifeq ($(HUGE_PAGES), 1)
+	hugeedit --text --data $(PRGNAME)
+endif
+
 $(OBJ_CPP) : %.o : %.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 	

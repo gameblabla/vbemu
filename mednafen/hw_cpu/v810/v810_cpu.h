@@ -124,18 +124,6 @@ enum
 #define TESTCOND_GE             (!((!!(S_REG[PSW]&PSW_S))^(!!(S_REG[PSW]&PSW_OV))))
 #define TESTCOND_GT             (! (((!!(S_REG[PSW]&PSW_S))^(!!(S_REG[PSW]&PSW_OV))) || (S_REG[PSW]&PSW_Z)) )
 
-// Tag layout
-//  Bit 0-21: TAG31-TAG10
-//  Bit 22-23: Validity bits(one for each 4-byte subblock)
-//  Bit 24-27: NECRV("Reserved")
-//  Bit 28-31: 0
-
-typedef enum
-{
- V810_EMU_MODE_FAST = 0,
- V810_EMU_MODE_ACCURATE = 1,
- _V810_EMU_MODE_COUNT
-} V810_Emu_Mode;
 
 //
 // WARNING: Do NOT instantiate this class in multiple threads in such a way that both threads can be inside a method of this class at the same time.
@@ -151,7 +139,7 @@ class V810
  ~V810();
 
  // Pass TRUE for vb_mode if we're emulating a VB-specific enhanced V810 CPU core
- bool Init(V810_Emu_Mode mode, bool vb_mode);
+ bool Init(void);
  void Kill(void);
 
  void SetInt(int level);
@@ -190,11 +178,6 @@ class V810
  void Reset(void);
 
  int StateAction(StateMem *sm, int load, int data_only);
-
- #ifdef WANT_DEBUGGER
- void CheckBreakpoints(void (*callback)(int type, uint32 address, uint32 value, unsigned int len), uint16 MDFN_FASTCALL (*peek16)(const v810_timestamp_t, uint32), uint32 MDFN_FASTCALL (*peek32)(const v810_timestamp_t, uint32));
- void SetCPUHook(void (*newhook)(const v810_timestamp_t timestamp, uint32 PC), void (*new_ADDBT)(uint32, uint32, uint32));
- #endif
  uint32 GetPC(void);
  void SetPC(uint32);
 
@@ -232,17 +215,8 @@ class V810
   LASTOP_OUT = 4,
   LASTOP_HEAVY_MATH = 5
  };
-
- V810_Emu_Mode EmuMode;
- bool VBMode;
-
+ 
  void Run_Fast(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp)) NO_INLINE;
- void Run_Accurate(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp)) NO_INLINE;
-
- #ifdef WANT_DEBUGGER
- void Run_Fast_Debug(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp)) NO_INLINE;
- void Run_Accurate_Debug(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp)) NO_INLINE;
- #endif
 
  uint8 MDFN_FASTCALL (*MemRead8)(v810_timestamp_t &timestamp, uint32 A);
  uint16 MDFN_FASTCALL (*MemRead16)(v810_timestamp_t &timestamp, uint32 A);
@@ -308,13 +282,6 @@ class V810
 
  uint8 *FastMap[(1ULL << 32) / V810_FAST_MAP_PSIZE];
  std::vector<void *> FastMapAllocList;
-
-
- #ifdef WANT_DEBUGGER
- void (*CPUHook)(const v810_timestamp_t timestamp, uint32 PC);
- void (*ADDBT)(uint32 old_PC, uint32 new_PC, uint32);
- #endif
-
 
  // For CacheDump and CacheRestore
  void CacheOpMemStore(v810_timestamp_t &timestamp, uint32 A, uint32 V);

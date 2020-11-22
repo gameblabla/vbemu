@@ -37,7 +37,6 @@ SDL_Surface *sdl_screen, *backbuffer;
 #define SDL_TRIPLEBUF SDL_DOUBLEBUF
 #endif
 
-
 #if defined(WANT_32BPP)
 #define SDL_FLAGS SDL_HWSURFACE | SDL_DOUBLEBUF
 uint32_t* __restrict__ internal_pix;
@@ -69,7 +68,7 @@ void Set_Video_Menu()
 		SDL_FreeSurface(sdl_screen);
 		sdl_screen = NULL;
 	}
-	sdl_screen = SDL_SetVideoMode(320, 240, 16, SDL_HWSURFACE);
+	sdl_screen = SDL_SetVideoMode(320, 240, 16, SDL_FLAGS);
 }
 
 void Set_Video_InGame()
@@ -79,7 +78,6 @@ void Set_Video_InGame()
 		SDL_FreeSurface(sdl_screen);
 		sdl_screen = NULL;
 	}
-
 #if defined(WANT_32BPP)
 	sdl_screen = SDL_SetVideoMode(384, 224, 32, SDL_FLAGS);
 	internal_pix = (uint32_t*)sdl_screen->pixels;
@@ -95,8 +93,16 @@ void Set_Video_InGame()
 
 void Video_Close()
 {
-	if (sdl_screen) SDL_FreeSurface(sdl_screen);
-	if (backbuffer) SDL_FreeSurface(backbuffer);
+	if (sdl_screen)
+	{
+		SDL_FreeSurface(sdl_screen);
+		sdl_screen = NULL;
+	}
+	if (backbuffer)
+	{
+		SDL_FreeSurface(backbuffer);
+		backbuffer = NULL;
+	}
 	SDL_Quit();
 }
 

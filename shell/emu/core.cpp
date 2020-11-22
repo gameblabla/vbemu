@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
+#ifndef _BSD_SOURCE
 #define _BSD_SOURCE
+#endif
 #include <sys/time.h>
 #include <stdarg.h>
 #include <iconv.h>
@@ -22,12 +24,12 @@ void MDFN_FlushGameCheats(int nosave);
 
 static bool overscan;
 static double last_sound_rate;
-static struct MDFN_PixelFormat last_pixel_format;
-
 static struct MDFN_Surface surf;
 
 char GameName_emu[512];
 extern uint32_t emulator_state;
+
+static uint64_t video_frames = 0;
 
 uint8_t exit_vb = 0;
 
@@ -118,7 +120,7 @@ MDFNGI EmulatedVB =
 	384,   // Nominal width
 	224,   // Nominal height
 	384,   // Framebuffer width
-	256,   // Framebuffer height
+	224,   // Framebuffer height
 	2,     // Number of output sound channels
 };
 
@@ -515,8 +517,6 @@ static INLINE uint32 round_up_pow2(uint32 v)
 
 static int Load(const uint8_t *data, size_t size)
 {
-   V810_Emu_Mode cpu_mode = (V810_Emu_Mode)MDFN_GetSettingI("vb.cpu_emulation");
-
    /* VB ROM image size is not a power of 2??? */
    if(size != round_up_pow2(size))
       return(0);
@@ -531,10 +531,8 @@ static int Load(const uint8_t *data, size_t size)
 
    printf("ROM:       %dKiB\n", (int)(size / 1024));
 
-   printf("V810 Emulation Mode: %s\n", (cpu_mode == V810_EMU_MODE_ACCURATE) ? "Accurate" : "Fast");
-
    VB_V810 = new V810();
-   VB_V810->Init(cpu_mode, true);
+   VB_V810->Init();
 
    VB_V810->SetMemReadHandlers(MemRead8, MemRead16, NULL);
    VB_V810->SetMemWriteHandlers(MemWrite8, MemWrite16, NULL);
@@ -716,7 +714,7 @@ static void Emulate(EmulateSpecStruct *espec, int16_t *sound_buf)
 {
 	v810_timestamp_t v810_timestamp;
 
-	MDFNMP_ApplyPeriodicCheats();
+	//MDFNMP_ApplyPeriodicCheats();
 
 	VBINPUT_Frame();
 
@@ -793,8 +791,6 @@ extern "C" int StateAction(StateMem *sm, int load, int data_only)
    return(ret);
 }
 
-static void SetLayerEnableMask(uint64 mask) { }
-
 static void DoSimpleCommand(int cmd)
 {
    switch(cmd)
@@ -805,51 +801,6 @@ static void DoSimpleCommand(int cmd)
          break;
    }
 }
-
-static const InputDeviceInputInfoStruct IDII[] =
-{
- { "a", "A", 7, IDIT_BUTTON_CAN_RAPID,  NULL },
- { "b", "B", 6, IDIT_BUTTON_CAN_RAPID, NULL },
- { "rt", "Right-Back", 13, IDIT_BUTTON, NULL },
- { "lt", "Left-Back", 12, IDIT_BUTTON, NULL },
-
- { "up-r", "UP ↑ (Right D-Pad)", 8, IDIT_BUTTON, "down-r" },
- { "right-r", "RIGHT → (Right D-Pad)", 11, IDIT_BUTTON, "left-r" },
-
- { "right-l", "RIGHT → (Left D-Pad)", 3, IDIT_BUTTON, "left-l" },
- { "left-l", "LEFT ← (Left D-Pad)", 2, IDIT_BUTTON, "right-l" },
- { "down-l", "DOWN ↓ (Left D-Pad)", 1, IDIT_BUTTON, "up-l" },
- { "up-l", "UP ↑ (Left D-Pad)", 0, IDIT_BUTTON, "down-l" },
-
- { "start", "Start", 5, IDIT_BUTTON, NULL },
- { "select", "Select", 4, IDIT_BUTTON, NULL },
-
- { "left-r", "LEFT ← (Right D-Pad)", 10, IDIT_BUTTON, "right-r" },
- { "down-r", "DOWN ↓ (Right D-Pad)", 9, IDIT_BUTTON, "up-r" },
-};
-
-static InputDeviceInfoStruct InputDeviceInfo[] =
-{
- {
-  "gamepad",
-  "Gamepad",
-  NULL,
-  NULL,
-  sizeof(IDII) / sizeof(InputDeviceInputInfoStruct),
-  IDII,
- }
-};
-
-static const InputPortInfoStruct PortInfo[] =
-{
- { "builtin", "Built-In", sizeof(InputDeviceInfo) / sizeof(InputDeviceInfoStruct), InputDeviceInfo, "gamepad" }
-};
-
-static InputInfoStruct InputInfo =
-{
- sizeof(PortInfo) / sizeof(InputPortInfoStruct),
- PortInfo
-};
 
 static bool MDFNI_LoadGame(const uint8_t *data, size_t size)
 {
@@ -916,7 +867,6 @@ static void check_variables(void)
 	/* Red and black */
 	setting_vb_lcolor = 0xAA0000;
 	setting_vb_rcolor = 0x000000;
-	setting_vb_cpu_emulation = V810_EMU_MODE_FAST;
 	setting_vb_right_analog_to_digital = true;
 	setting_vb_right_invert_x = false;
 	setting_vb_right_invert_y = false;
@@ -974,12 +924,6 @@ bool Load_Game_Memory(char* game_name)
 	pix_fmt.Gshift     = sdl_screen->format->Gshift;
 	pix_fmt.Bshift     = sdl_screen->format->Bshift;
 	pix_fmt.Ashift     = sdl_screen->format->Ashift;
-	last_pixel_format.bpp        = 0;
-	last_pixel_format.colorspace = 0;
-	last_pixel_format.Rshift     = 0;
-	last_pixel_format.Gshift     = 0;
-	last_pixel_format.Bshift     = 0;
-	last_pixel_format.Ashift     = 0;
 #elif defined(WANT_8BPP)
 	extern SDL_Surface* sdl_screen;
 	pix_fmt.bpp        = 8;
@@ -987,48 +931,17 @@ bool Load_Game_Memory(char* game_name)
 	pix_fmt.Gshift     = sdl_screen->format->Gshift;
 	pix_fmt.Bshift     = sdl_screen->format->Bshift;
 	pix_fmt.Ashift     = sdl_screen->format->Ashift;
-	last_pixel_format.bpp        = 0;
-	last_pixel_format.colorspace = 0;
-	last_pixel_format.Rshift     = 0;
-	last_pixel_format.Gshift     = 0;
-	last_pixel_format.Bshift     = 0;
-	last_pixel_format.Ashift     = 0;
 #else
 	pix_fmt.bpp        = 32;
 	pix_fmt.Rshift     = 16;
 	pix_fmt.Gshift     = 8;
 	pix_fmt.Bshift     = 0;
 	pix_fmt.Ashift     = 24;
-	last_pixel_format.bpp        = 0;
-	last_pixel_format.colorspace = 0;
-	last_pixel_format.Rshift     = 0;
-	last_pixel_format.Gshift     = 0;
-	last_pixel_format.Bshift     = 0;
-	last_pixel_format.Ashift     = 0;
 #endif
 	pix_fmt.colorspace = MDFN_COLORSPACE_RGB;
 
 	surf.format                  = pix_fmt;
-	surf.pixels16                = NULL;
-	surf.pixels                  = NULL;
-#if defined(WANT_8BPP)
-	surf.palette = NULL;
-#endif
-	
-
-#if defined(WANT_8BPP)
-	surf.pixels8 = (uint8 *)internal_pix;
-	surf.palette = (MDFN_PaletteEntry*)calloc(sizeof(MDFN_PaletteEntry), 256);
-#elif defined(WANT_16BPP)
-	surf.pixels16                = (uint16 *)internal_pix;
-#elif defined(WANT_32BPP)
-	surf.pixels                  = (uint32 *)internal_pix;
-#elif defined(WANT_8BPP)
-   surf.pixels8 = NULL;
-   if(surf.palette)
-      free(surf.palette);
-   surf.palette = NULL;
-#endif
+	surf.pixels                  = (WIDTH_TYPE *)internal_pix;
 	surf.w                       = FB_WIDTH;
 	surf.h                       = FB_HEIGHT;
 	surf.pitchinpix              = FB_WIDTH;
@@ -1042,66 +955,6 @@ void retro_unload_game(void)
    MDFNI_CloseGame();
 }
 
-static void update_input(void)
-{
-   /*unsigned i,j;
-   int16_t joy_bits[MAX_PLAYERS] = {0};*/
-
-	input_buf[0] = Read_Input();
-   /*static unsigned map[] = {
-      RETRO_DEVICE_ID_JOYPAD_A,
-      RETRO_DEVICE_ID_JOYPAD_B,
-      RETRO_DEVICE_ID_JOYPAD_R,
-      RETRO_DEVICE_ID_JOYPAD_L,
-      RETRO_DEVICE_ID_JOYPAD_L2, //right d-pad UP
-      RETRO_DEVICE_ID_JOYPAD_R3, //right d-pad RIGHT
-      RETRO_DEVICE_ID_JOYPAD_RIGHT, //left d-pad
-      RETRO_DEVICE_ID_JOYPAD_LEFT, //left d-pad
-      RETRO_DEVICE_ID_JOYPAD_DOWN, //left d-pad
-      RETRO_DEVICE_ID_JOYPAD_UP, //left d-pad
-      RETRO_DEVICE_ID_JOYPAD_START,
-      RETRO_DEVICE_ID_JOYPAD_SELECT,
-      RETRO_DEVICE_ID_JOYPAD_R2, //right d-pad LEFT
-      RETRO_DEVICE_ID_JOYPAD_L3, //right d-pad DOWN
-   };
-
-   for (j = 0; j < MAX_PLAYERS; j++)
-   {
-      if (libretro_supports_bitmasks)
-         joy_bits[j] = input_state_cb(j, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
-      else
-      {
-         for (i = 0; i < (RETRO_DEVICE_ID_JOYPAD_R3+1); i++)
-            joy_bits[j] |= input_state_cb(j, RETRO_DEVICE_JOYPAD, 0, i) ? (1 << i) : 0;
-      }
-   }
-
-   for (j = 0; j < MAX_PLAYERS; j++)
-   {
-      for (i = 0; i < MAX_BUTTONS; i++)
-         input_buf[j] |= (map[i] != -1u) && (joy_bits[j] & (1 << map[i])) ? (1 << i) : 0;
-
-      if (setting_vb_right_analog_to_digital) {
-         int16_t analog_x = input_state_cb(j, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X);
-         int16_t analog_y = input_state_cb(j, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y);
-
-         if (abs(analog_x) > STICK_DEADZONE)
-            input_buf[j] |= (analog_x < 0) ^ !setting_vb_right_invert_x ? RIGHT_DPAD_RIGHT : RIGHT_DPAD_LEFT;
-         if (abs(analog_y) > STICK_DEADZONE)
-            input_buf[j] |= (analog_y < 0) ^ !setting_vb_right_invert_y ? RIGHT_DPAD_DOWN : RIGHT_DPAD_UP;
-      }
-
-#ifdef MSB_FIRST
-      union {
-         uint8_t b[2];
-         uint16_t s;
-      } u;
-      u.s = input_buf[j];
-      input_buf[j] = u.b[0] | u.b[1] << 8;
-#endif
-   }*/
-}
-
 static uint64_t audio_frames;
 
 #ifdef FRAMESKIP
@@ -1113,7 +966,7 @@ static uint32_t Timer_Read(void)
 	return (((tval.tv_sec*1000000) + (tval.tv_usec)));
 }
 static long lastTick = 0, newTick;
-static uint32_t SkipCnt = 0, video_frames = 0, FPS = MEDNAFEN_CORE_TIMING_FPS, FrameSkip;
+static uint32_t SkipCnt = 0, FPS = MEDNAFEN_CORE_TIMING_FPS, FrameSkip;
 static const uint32_t TblSkip[5][5] = {
     {0, 0, 0, 0, 0},
     {0, 0, 0, 0, 1},
@@ -1125,50 +978,42 @@ static const uint32_t TblSkip[5][5] = {
 
 void Emulation_Run(void)
 {
-   //input_poll_cb();
+	static int16_t sound_buf[0x10000];
+	static MDFN_Rect rects[FB_MAX_HEIGHT];
+	rects[0].w = ~0;
 
-   update_input();
-
-   static int16_t sound_buf[0x10000];
-   static MDFN_Rect rects[FB_MAX_HEIGHT];
-   bool resolution_changed = false;
-   rects[0].w = ~0;
-
-   EmulateSpecStruct spec = {0};
-   spec.surface    = &surf;
-   spec.SoundRate  = SOUND_OUTPUT_FREQUENCY;
-   spec.LineWidths = rects;
-   spec.SoundBufMaxSize = sizeof(sound_buf) / 2;
-   spec.SoundBufSize = 0;
-   spec.VideoFormatChanged = false;
-   spec.SoundFormatChanged = false;
+	EmulateSpecStruct spec = {0};
+	spec.surface    = &surf;
+	spec.SoundRate  = SOUND_OUTPUT_FREQUENCY;
+	spec.LineWidths = rects;
+	spec.SoundBufMaxSize = sizeof(sound_buf) / 2;
+	spec.SoundBufSize = 0;
+	spec.VideoFormatChanged = false;
+	spec.SoundFormatChanged = false;
+#ifdef FRAMESKIP
 	SkipCnt++;
 	if (SkipCnt > 4) SkipCnt = 0;
-   spec.skip = TblSkip[FrameSkip][SkipCnt];
+	spec.skip = TblSkip[FrameSkip][SkipCnt];
+#else
+	spec.skip = 0;
+#endif
+	input_buf[0] = Read_Input();
 
-   if (memcmp(&last_pixel_format, &spec.surface->format, sizeof(struct MDFN_PixelFormat)))
-   {
-      spec.VideoFormatChanged = true;
+	if (spec.SoundRate != last_sound_rate)
+	{
+		spec.SoundFormatChanged = true;
+		last_sound_rate = spec.SoundRate;
+	}
 
-      last_pixel_format = spec.surface->format;
-   }
+	Emulate(&spec, sound_buf);
 
-   if (spec.SoundRate != last_sound_rate)
-   {
-      spec.SoundFormatChanged = true;
-      last_sound_rate = spec.SoundRate;
-   }
-
-   Emulate(&spec, sound_buf);
-
-   int16 *const SoundBuf = sound_buf + spec.SoundBufSizeALMS * EmulatedVB.soundchan;
-   int32 SoundBufSize = spec.SoundBufSize - spec.SoundBufSizeALMS;
-   const int32 SoundBufMaxSize = spec.SoundBufMaxSize - spec.SoundBufSizeALMS;
-
-   spec.SoundBufSize = spec.SoundBufSizeALMS + SoundBufSize;
+	int16 *const SoundBuf = sound_buf + spec.SoundBufSizeALMS * EmulatedVB.soundchan;
+	int32 SoundBufSize = spec.SoundBufSize - spec.SoundBufSizeALMS;
+	const int32 SoundBufMaxSize = spec.SoundBufMaxSize - spec.SoundBufSizeALMS;
+	spec.SoundBufSize = spec.SoundBufSizeALMS + SoundBufSize;
    
 #ifdef FRAMESKIP
-	if (spec.skip == false) video_frames++;
+	
 	newTick = Timer_Read();
 	if ( (newTick) - (lastTick) > 1000000) 
 	{
@@ -1186,20 +1031,21 @@ void Emulation_Run(void)
 		}
 	}
 #endif
-	Update_Video_Ingame();
 
-   video_frames++;
-   audio_frames += spec.SoundBufSize;
-
-   //audio_batch_cb(sound_buf, spec.SoundBufSize);
 	Audio_Write((int16_t*) sound_buf, spec.SoundBufSize);
+	audio_frames += spec.SoundBufSize;
+	Update_Video_Ingame();
+	
+#ifdef FRAMESKIP
+	if (spec.skip == false) video_frames++;
+#else
+	video_frames++;
+#endif
 }
 
 
 void Clean(void)
 {
-   surf.pixels8    = NULL;
-   surf.pixels16   = NULL;
    surf.pixels     = NULL;
    surf.w          = 0;
    surf.h          = 0;
@@ -1321,7 +1167,7 @@ void SaveState(char* path, uint_fast8_t state)
 {	
 	FILE* savefp;
 	size_t file_size;
-	char* buffer;
+	char* buffer = NULL;
 	if (state == 1)
 	{
 		savefp = fopen(path, "rb");
@@ -1330,9 +1176,13 @@ void SaveState(char* path, uint_fast8_t state)
 			fseek(savefp, 0, SEEK_END);
 			file_size = ftell(savefp);
 			fseek(savefp, 0, SEEK_SET);
-			fread(&buffer, sizeof(uint8_t), file_size, savefp);
-			buffer = (char*)malloc(file_size);
-			retro_unserialize(buffer, file_size);
+			if (file_size > 0)
+			{
+				buffer = (char*)malloc(file_size);
+				fread(buffer, sizeof(uint8_t), file_size, savefp);
+				retro_unserialize(buffer, file_size);
+			}
+			fclose(savefp);
 		}
 	}
 	else
@@ -1343,7 +1193,7 @@ void SaveState(char* path, uint_fast8_t state)
 			file_size = retro_serialize_size();
 			buffer = (char*)malloc(file_size);
 			retro_serialize(buffer, file_size);
-			fwrite(&buffer, sizeof(uint8_t), file_size, savefp);
+			fwrite(buffer, sizeof(uint8_t), file_size, savefp);
 			fclose(savefp);
 		}
 	}
@@ -1362,16 +1212,15 @@ void SRAM_Save(char* path, uint_fast8_t state)
 	size_t file_size = 0;
 	if (state == 1)
 	{
-		/* Currently not working for some reasons */
-		/*savefp = fopen(path, "rb");
+		savefp = fopen(path, "rb");
 		if (savefp)
 		{
 			fseek(savefp, 0, SEEK_END);
 			file_size = ftell(savefp);
 			fseek(savefp, 0, SEEK_SET);
-			fread(&GPRAM, sizeof(uint8_t), file_size, savefp);
+			fread(GPRAM, sizeof(uint8_t), file_size, savefp);
 			fclose(savefp);
-		}*/
+		}
 	}
 	else
 	{
@@ -1381,7 +1230,7 @@ void SRAM_Save(char* path, uint_fast8_t state)
 			savefp = fopen(path, "wb");
 			if (savefp)
 			{
-				fwrite(&GPRAM, sizeof(uint8_t), file_size, savefp);
+				fwrite(GPRAM, sizeof(uint8_t), file_size, savefp);
 				fclose(savefp);
 			}
 		}

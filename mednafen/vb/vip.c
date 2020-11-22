@@ -417,7 +417,7 @@ bool VIP_Init(void)
    VBPrescale = 1;
    VBSBS_Separation = 0;
 
-   VidSettingsDirty = false;
+   VidSettingsDirty = true;
 
    return(true);
 }
@@ -950,13 +950,7 @@ void VIP_StartFrame(EmulateSpecStruct *espec)
    
    if(VidSettingsDirty)
    {
-#if defined(WANT_32BPP)
-	  memset(surface->pixels, 0, 384 * 224 * 4);
-#elif defined(WANT_16BPP)
-	  memset(surface->pixels16, 0, 384 * 224 * 2);
-#elif defined(WANT_8BPP)
-	  memset(surface->pixels8, 0, 384 * 224);
-#endif
+	  memset(surface->pixels, 0, (384 * 224)*sizeof(WIDTH_TYPE));
 
       VidSettingsDirty = false;
    }
@@ -980,14 +974,7 @@ static INLINE void CopyFBColumnToTarget_Anaglyph_BASE(const bool DisplayActive_a
 {
    int y, y_sub;
    const int fb = DisplayFB;
-
-#if defined(WANT_8BPP)
-   uint8  *target = surface->pixels8  + Column;
-#elif defined(WANT_16BPP)
-   uint16 *target = surface->pixels16 + Column;
-#else
-   uint32 *target = surface->pixels   + Column;
-#endif
+   WIDTH_TYPE *target = surface->pixels   + Column;
    const int32 pitchinpix = surface->pitchinpix;
    const uint8 *fb_source = &FB[fb][lr][64 * Column];
 
@@ -1451,21 +1438,7 @@ v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
          {
             MDFN_ALIGN(8) uint8 DrawingBuffers[2][512 * 8];	// Don't decrease this from 512 unless you adjust vip_draw.inc(including areas that draw off-visible >= 384 and >= -7 for speed reasons)
 
-            if(skip && InstantDisplayHack && AllowDrawSkip)
-            {
-#if 0
-               for(int lr = 0; lr < 2; lr++)
-               {
-                  uint8 *FB_Target = FB[DrawingFB][lr] + DrawingBlock * 2;
-                  for(int x = 0; x < 384; x++)
-                  {
-                     FB_Target[64 * x + 0] = BKCOL;
-                     FB_Target[64 * x + 1] = BKCOL;
-                  }
-               }
-#endif
-            }
-            else
+            if(!(skip && InstantDisplayHack && AllowDrawSkip))
             {
                int lr;
                VIP_DrawBlock(DrawingBlock, DrawingBuffers[0] + 8, DrawingBuffers[1] + 8);

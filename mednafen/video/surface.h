@@ -59,10 +59,13 @@ enum
 };
 
 
-struct MDFN_PaletteEntry
-{
- uint8 r, g, b;
-};
+#if defined(WANT_16BPP)
+	#define WIDTH_TYPE uint16_t
+#elif defined(WANT_8BPP)
+	#define WIDTH_TYPE uint8_t
+#elif defined(WANT_32BPP)
+	#define WIDTH_TYPE uint32_t
+#endif
 
 struct MDFN_PixelFormat
 {
@@ -79,9 +82,7 @@ struct MDFN_PixelFormat
 //  16-bit is WIP
 struct MDFN_Surface //typedef struct
 {
-   uint8  *pixels8;
-   uint16 *pixels16;
-   uint32 *pixels;
+	WIDTH_TYPE *pixels;
 
    // w, h, and pitch32 should always be > 0
    int32 w;
@@ -92,8 +93,6 @@ struct MDFN_Surface //typedef struct
       int32 pitch32; // In pixels, not in bytes.
       int32 pitchinpix;	// New name, new code should use this.
    };
-   
-   struct MDFN_PaletteEntry *palette;
 
    struct MDFN_PixelFormat format;
 };
