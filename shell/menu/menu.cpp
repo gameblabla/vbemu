@@ -61,14 +61,30 @@ static void config_load()
 	{
 		fread(&option, sizeof(option), sizeof(int8_t), fp);
 		fclose(fp);
+		
+		/* Fix it accordingly if previous config file is detected*/
+		if (option.config_buttons[1] == SDLK_RIGHT)
+		{
+			/* Default mapping for Horizontal */
+			option.config_buttons[0] = SDLK_UP; // UP
+			option.config_buttons[1] = SDLK_DOWN; // DOWN
+			option.config_buttons[2] = SDLK_LEFT; // LEFT
+			option.config_buttons[3] = SDLK_RIGHT; // RIGHT
+
+			/* Default mapping for Horizontal */
+			option.config_buttons[10] = 0; // DPAD2-UP
+			option.config_buttons[11] = 0; // DPAD2-DOWN
+			option.config_buttons[12] = SDLK_LSHIFT; // DPAD2-LEFT
+			option.config_buttons[13] = SDLK_SPACE; // DPAD2-RIGHT	
+		}
 	}
 	else
 	{
 		/* Default mapping for Horizontal */
 		option.config_buttons[0] = SDLK_UP; // UP
-		option.config_buttons[1] = SDLK_RIGHT; // RIGHT
-		option.config_buttons[2] = SDLK_DOWN; // DOWN
-		option.config_buttons[3] = SDLK_LEFT; // LEFT
+		option.config_buttons[1] = SDLK_DOWN; // DOWN
+		option.config_buttons[2] = SDLK_LEFT; // LEFT
+		option.config_buttons[3] = SDLK_RIGHT; // RIGHT
 
 		option.config_buttons[4] = SDLK_LCTRL; // A
 		option.config_buttons[5] = SDLK_LALT; // B
@@ -80,10 +96,10 @@ static void config_load()
 		option.config_buttons[9] = SDLK_ESCAPE; // SELECT
 		
 		/* Default mapping for Horizontal */
-		option.config_buttons[10] = 0; // UP
-		option.config_buttons[11] = 0; // RIGHT
-		option.config_buttons[12] = 0; // DOWN
-		option.config_buttons[13] = 0; // LEFT
+		option.config_buttons[10] = 0; // DPAD2-UP
+		option.config_buttons[11] = 0; // DPAD2-DOWN
+		option.config_buttons[12] = SDLK_LSHIFT; // DPAD2-LEFT
+		option.config_buttons[13] = SDLK_SPACE; // DPAD2-RIGHT
 
 		option.fullscreen = 1;
 	}
@@ -204,13 +220,12 @@ static void Input_Remapping()
                         currentselection--;
                         if (currentselection < 1)
                         {
-							if (currentselection > 9) currentselection = 12;
-							else currentselection = 9;
+							currentselection = 14;
 						}
                         break;
                     case SDLK_DOWN:
                         currentselection++;
-                        if (currentselection == 10)
+                        if (currentselection == 15)
                         {
 							currentselection = 1;
 						}
@@ -226,10 +241,10 @@ static void Input_Remapping()
                         exit_input = 1;
 					break;
                     case SDLK_LEFT:
-						if (currentselection > 9) currentselection -= 9;
+						if (currentselection > 8) currentselection -= 8;
 					break;
                     case SDLK_RIGHT:
-						if (currentselection < 10) currentselection += 9;
+						if (currentselection < 9) currentselection += 8;
 					break;
 					default:
 					break;
@@ -267,7 +282,7 @@ static void Input_Remapping()
             }
         }
 
-        if (currentselection > 12) currentselection = 12;
+        if (currentselection > 14) currentselection = 14;
 
 		print_string("Press [A] to map to a button", TextWhite, TextBlue, 50, 210, (uint16_t*)backbuffer->pixels);
 		print_string("Press [B] to Exit", TextWhite, TextBlue, 85, 225, (uint16_t*)backbuffer->pixels);
@@ -297,36 +312,36 @@ static void Input_Remapping()
 		else print_string(text, TextWhite, 0, 5, 125+2, (uint16_t*)backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "L    : %s\n", Return_Text_Button(option.config_buttons[6]));
-		if (currentselection == 9) print_string(text, TextRed, 0, 5, 185+2, (uint16_t*)backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 5, 185+2, (uint16_t*)backbuffer->pixels);
+		if (currentselection == 7) print_string(text, TextRed, 0, 5, 145+2, (uint16_t*)backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 5, 145+2, (uint16_t*)backbuffer->pixels);
 
-		snprintf(text, sizeof(text), "R      : %s\n", Return_Text_Button(option.config_buttons[7]));
-		if (currentselection == 10) print_string(text, TextRed, 0, 165, 25+2, (uint16_t*)backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 25+2, (uint16_t*)backbuffer->pixels);
+		snprintf(text, sizeof(text), "R    : %s\n", Return_Text_Button(option.config_buttons[7]));
+		if (currentselection == 8) print_string(text, TextRed, 0, 5, 165+2, (uint16_t*)backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 5, 165+2, (uint16_t*)backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "START  : %s\n", Return_Text_Button(option.config_buttons[8]));
-		if (currentselection == 11) print_string(text, TextRed, 0, 165, 45+2, (uint16_t*)backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 45+2, (uint16_t*)backbuffer->pixels);
+		if (currentselection == 9) print_string(text, TextRed, 0, 165, 25+2, (uint16_t*)backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165, 25+2, (uint16_t*)backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "SELECT : %s\n", Return_Text_Button(option.config_buttons[9]));
-		if (currentselection == 12) print_string(text, TextRed, 0, 165, 65+2, (uint16_t*)backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 65+2, (uint16_t*)backbuffer->pixels);
+		if (currentselection == 10) print_string(text, TextRed, 0, 165, 45+2, (uint16_t*)backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165, 45+2, (uint16_t*)backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "D2-UP  : %s\n", Return_Text_Button(option.config_buttons[10]));
-		if (currentselection == 13) print_string(text, TextRed, 0, 165, 85+2, (uint16_t*)backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 85+2, (uint16_t*)backbuffer->pixels);
+		if (currentselection == 11) print_string(text, TextRed, 0, 165, 65+2, (uint16_t*)backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165, 65+2, (uint16_t*)backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "D2-DOWN : %s\n", Return_Text_Button(option.config_buttons[11]));
-		if (currentselection == 14) print_string(text, TextRed, 0, 165, 105+2, (uint16_t*)backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 105+2, (uint16_t*)backbuffer->pixels);
+		if (currentselection == 12) print_string(text, TextRed, 0, 165, 85+2, (uint16_t*)backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165, 85+2, (uint16_t*)backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "D2-LEFT  : %s\n", Return_Text_Button(option.config_buttons[12]));
-		if (currentselection == 15) print_string(text, TextRed, 0, 165, 125+2, (uint16_t*)backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 125+2, (uint16_t*)backbuffer->pixels);
+		if (currentselection == 13) print_string(text, TextRed, 0, 165, 105+2, (uint16_t*)backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165, 105+2, (uint16_t*)backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "D2-RIGHT : %s\n", Return_Text_Button(option.config_buttons[13]));
-		if (currentselection == 16) print_string(text, TextRed, 0, 165, 145+2, (uint16_t*)backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 145+2, (uint16_t*)backbuffer->pixels);
+		if (currentselection == 14) print_string(text, TextRed, 0, 165, 125+2, (uint16_t*)backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165, 125+2, (uint16_t*)backbuffer->pixels);
 
 		SDL_SoftStretch(backbuffer, NULL, sdl_screen, NULL);
 		SDL_Flip(sdl_screen);
@@ -336,9 +351,9 @@ static void Input_Remapping()
 }
 
 #ifdef SCALING_SOFTWARE
-#define SCALING_SOFTWARE_OFFSET 1
-#else
 #define SCALING_SOFTWARE_OFFSET 0
+#else
+#define SCALING_SOFTWARE_OFFSET 1
 #endif
 
 void Menu()

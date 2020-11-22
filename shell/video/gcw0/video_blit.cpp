@@ -50,11 +50,25 @@ uint16_t* __restrict__ internal_pix;
 uint8_t* __restrict__ internal_pix;
 #endif
 
+#ifdef ENABLE_JOYSTICKCODE
+SDL_Joystick* sdl_joy;
+#endif
+
 void Init_Video()
 {
 	setenv("SDL_VIDEO_REFRESHRATE", "50", 0);
 	
-	SDL_Init( SDL_INIT_VIDEO );
+	#ifdef ENABLE_JOYSTICKCODE
+	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
+	
+	if (SDL_NumJoysticks() > 0)
+	{
+		sdl_joy = SDL_JoystickOpen(0);
+		SDL_JoystickEventState(SDL_ENABLE);
+	}
+	#else
+	SDL_Init(SDL_INIT_VIDEO);
+	#endif
 
 	SDL_ShowCursor(0);
 
@@ -103,6 +117,9 @@ void Set_Video_InGame()
 
 void Video_Close()
 {
+	#ifdef ENABLE_JOYSTICKCODE
+	SDL_JoystickClose(sdl_joy);
+	#endif
 	if (sdl_screen)
 	{
 		SDL_FreeSurface(sdl_screen);

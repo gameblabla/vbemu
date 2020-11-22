@@ -10,6 +10,11 @@ uint8_t *keystate;
 extern uint8_t exit_vb;
 extern uint32_t emulator_state;
 
+#ifdef ENABLE_JOYSTICKCODE
+#define joy_commit_range 8192
+int32_t axis_input[4] = {0, 0, 0, 0};
+#endif
+
 uint16_t Read_Input(void)
 {
 	uint16_t button = 0;
@@ -25,10 +30,15 @@ uint16_t Read_Input(void)
 			case SDL_KEYDOWN:
 				switch(event.key.keysym.sym)
 				{
+#ifdef GKD350_BUG_INPUT
+					case SDLK_LSHIFT:
+#endif
 					case SDLK_RCTRL:
 					case SDLK_END:
 					case SDLK_ESCAPE:
 						emulator_state = 1;
+					break;
+					default:
 					break;
 				}
 			break;
@@ -38,7 +48,17 @@ uint16_t Read_Input(void)
 					case SDLK_HOME:
 						emulator_state = 1;
 					break;
+					default:
+					break;
 				}
+			break;
+			#ifdef ENABLE_JOYSTICKCODE
+			case SDL_JOYAXISMOTION:
+				if (event.jaxis.axis < 4)
+				axis_input[event.jaxis.axis] = event.jaxis.value;
+			break;
+			#endif
+			default:
 			break;
 		}
 	}
@@ -50,26 +70,27 @@ uint16_t Read_Input(void)
 #endif
 	) button |= 512;
 	
-	// RIGHT
+	// DOWN
 	if (keys[option.config_buttons[1] ] == SDL_PRESSED
 #ifdef ENABLE_JOYSTICKCODE
 	|| axis_input[1] > joy_commit_range
 #endif
-	) button |= 64;
+	) button |= 256;
 	
-	// DOWN
+	// LEFT
 	if (keys[option.config_buttons[2] ] == SDL_PRESSED
 #ifdef ENABLE_JOYSTICKCODE
 	|| axis_input[0] < -joy_commit_range
 #endif
-	) button |= 256;
+	) button |= 128;
 	
-	// LEFT
+	// RIGHT
 	if (keys[option.config_buttons[3] ] == SDL_PRESSED
 #ifdef ENABLE_JOYSTICKCODE
 	|| axis_input[0] > joy_commit_range
 #endif
-	) button |= 128;
+	) button |= 64;
+	
 	
 	// A
 	if (keys[option.config_buttons[4] ] == SDL_PRESSED) button |= 1;
@@ -85,6 +106,38 @@ uint16_t Read_Input(void)
 	if (keys[option.config_buttons[8] ] == SDL_PRESSED) button |= 1024;
 	// Select
 	if (keys[option.config_buttons[9] ] == SDL_PRESSED) button |= 2048;
+	
+	
+	/* Second axis is offset by one on the RG-350 */
+	
+	// DPAD2-UP
+	if (keys[option.config_buttons[10] ] == SDL_PRESSED
+#ifdef ENABLE_JOYSTICKCODE
+	|| axis_input[4] < -joy_commit_range
+#endif
+	) button |= 16;
+	
+	// DPAD2-DOWN
+	if (keys[option.config_buttons[11] ] == SDL_PRESSED
+#ifdef ENABLE_JOYSTICKCODE
+	|| axis_input[4] > joy_commit_range
+#endif
+	) button |= 8192;
+	
+	// DPAD2-LEFT
+	if (keys[option.config_buttons[12] ] == SDL_PRESSED
+#ifdef ENABLE_JOYSTICKCODE
+	|| axis_input[3] < -joy_commit_range
+#endif
+	) button |= 4096;
+	
+	// DPAD2-RIGHT
+	if (keys[option.config_buttons[13] ] == SDL_PRESSED
+#ifdef ENABLE_JOYSTICKCODE
+	|| axis_input[3] > joy_commit_range
+#endif
+	) button |= 32;
+	
 	
 	return button;
 }
