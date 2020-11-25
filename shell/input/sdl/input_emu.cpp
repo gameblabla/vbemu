@@ -12,7 +12,7 @@ extern uint32_t emulator_state;
 
 #ifdef ENABLE_JOYSTICKCODE
 #define joy_commit_range 8192
-int32_t axis_input[5] = {0, 0, 0, 0, 0};
+int32_t axis_input[4] = {0, 0, 0, 0};
 #endif
 
 uint16_t Read_Input(void)
@@ -53,7 +53,7 @@ uint16_t Read_Input(void)
 			break;
 			#ifdef ENABLE_JOYSTICKCODE
 			case SDL_JOYAXISMOTION:
-				if (event.jaxis.axis < 5)
+				if (event.jaxis.axis < 4)
 				axis_input[event.jaxis.axis] = event.jaxis.value;
 			break;
 			#endif
