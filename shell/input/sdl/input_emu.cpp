@@ -12,7 +12,7 @@ extern uint32_t emulator_state;
 
 #ifdef ENABLE_JOYSTICKCODE
 #define joy_commit_range 8192
-int32_t axis_input[4] = {0, 0, 0, 0};
+int32_t axis_input[5] = {0, 0, 0, 0, 0};
 #endif
 
 uint16_t Read_Input(void)
@@ -53,7 +53,7 @@ uint16_t Read_Input(void)
 			break;
 			#ifdef ENABLE_JOYSTICKCODE
 			case SDL_JOYAXISMOTION:
-				if (event.jaxis.axis < 4)
+				if (event.jaxis.axis < 5)
 				axis_input[event.jaxis.axis] = event.jaxis.value;
 			break;
 			#endif
@@ -112,28 +112,28 @@ uint16_t Read_Input(void)
 	// DPAD2-UP
 	if (keys[option.config_buttons[10] ] == SDL_PRESSED
 #ifdef ENABLE_JOYSTICKCODE
-	|| axis_input[4] < -joy_commit_range
+	|| axis_input[3] < -joy_commit_range
 #endif
 	) button |= 16;
 	
 	// DPAD2-DOWN
 	if (keys[option.config_buttons[11] ] == SDL_PRESSED
 #ifdef ENABLE_JOYSTICKCODE
-	|| axis_input[4] > joy_commit_range
+	|| axis_input[3] > joy_commit_range
 #endif
 	) button |= 8192;
 	
 	// DPAD2-LEFT
 	if (keys[option.config_buttons[12] ] == SDL_PRESSED
 #ifdef ENABLE_JOYSTICKCODE
-	|| axis_input[3] < -joy_commit_range
+	|| axis_input[2] < -joy_commit_range
 #endif
 	) button |= 4096;
 	
 	// DPAD2-RIGHT
 	if (keys[option.config_buttons[13] ] == SDL_PRESSED
 #ifdef ENABLE_JOYSTICKCODE
-	|| axis_input[3] > joy_commit_range
+	|| axis_input[2] > joy_commit_range
 #endif
 	) button |= 32;
 	
