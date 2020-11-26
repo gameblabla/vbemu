@@ -576,10 +576,9 @@ static int Load(const uint8_t *data, size_t size)
    V810_Init();
 
    /*V810_SetMemReadHandlers(MemRead8, MemRead16, NULL);
-   V810_SetMemWriteHandlers(MemWrite8, MemWrite16, NULL);
-
+   V810_SetMemWriteHandlers(MemWrite8, MemWrite16, NULL);*/
    V810_SetIOReadHandlers(MemRead8, MemRead16, NULL);
-   V810_SetIOWriteHandlers(MemWrite8, MemWrite16, NULL);*/
+   V810_SetIOWriteHandlers(MemWrite8, MemWrite16, NULL);
 
    for(int i = 0; i < 256; i++)
    {
@@ -1023,7 +1022,7 @@ void Emulation_Run(void)
 
 	int16 *const SoundBuf = sound_buf + spec.SoundBufSizeALMS * EmulatedVB.soundchan;
 	int32 SoundBufSize = spec.SoundBufSize - spec.SoundBufSizeALMS;
-	const int32 SoundBufMaxSize = spec.SoundBufMaxSize - spec.SoundBufSizeALMS;
+	//const int32 SoundBufMaxSize = spec.SoundBufMaxSize - spec.SoundBufSizeALMS;
 	spec.SoundBufSize = spec.SoundBufSizeALMS + SoundBufSize;
    
 #ifdef FRAMESKIP
