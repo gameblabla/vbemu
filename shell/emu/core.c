@@ -119,6 +119,7 @@ MDFNGI EmulatedVB =
 	384,   // Framebuffer width
 	224,   // Framebuffer height
 	2,     // Number of output sound channels
+	44100, // Sound frequency
 };
 
 MDFNGI *MDFNGameInfo = &EmulatedVB;

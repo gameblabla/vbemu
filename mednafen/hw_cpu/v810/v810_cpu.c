@@ -61,7 +61,6 @@ found freely through public domain sources.
 // Make sure P_REG[] is the first variable/array in this class, so non-zerfo offset encoding(at assembly level) isn't necessary to access it.
 static uint32 P_REG[32];  // Program registers pr0-pr31
 static uint32 S_REG[32];  // System registers sr0-sr31
-static uint32 PC;
 static uint8 *PC_ptr;
 static uint8 *PC_base;
 static uint32 IPendingCache;
@@ -115,11 +114,12 @@ enum
 	HALT_FATAL_EXCEPTION = 2
 };
 
-uint8 Halted;
-bool Running;
-int ilevel;
-bool in_bstr;
-uint16 in_bstr_to;
+static uint8 Halted;
+static bool Running;
+static int ilevel;
+static bool in_bstr;
+static uint16 in_bstr_to;
+
 bool bstr_subop(v810_timestamp_t timestamp, int sub_op, int arg1);
 void fpu_subop(v810_timestamp_t timestamp, int sub_op, int arg1, int arg2);
 void V810_Exception(uint32 handler, uint16 eCode);
@@ -134,12 +134,12 @@ typedef struct
 V810_CacheEntry_t Cache[128];
 
 // Bitstring variables.
-uint32 src_cache;
-uint32 dst_cache;
-bool have_src_cache, have_dst_cache;
+static uint32 src_cache;
+static uint32 dst_cache;
+static bool have_src_cache, have_dst_cache;
 
-uint8 *FastMap[(1ULL << 32) / V810_FAST_MAP_PSIZE];
-uint8* FastMapAllocList;
+static uint8 *FastMap[(1ULL << 32) / V810_FAST_MAP_PSIZE];
+static uint8* FastMapAllocList;
 
 // For CacheDump and CacheRestore
 void V810_CacheOpMemStore(v810_timestamp_t timestamp, uint32 A, uint32 V);
