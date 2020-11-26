@@ -1,12 +1,12 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <libgen.h>
 #ifndef _BSD_SOURCE
 #define _BSD_SOURCE
 #endif
 #include <sys/time.h>
 #include <stdarg.h>
 #include <iconv.h>
-#include "mednafen/mempatcher.h"
 #include "mednafen/git.h"
 #include "mednafen/state_helpers.h"
 #include "mednafen/masmem.h"
@@ -50,12 +50,12 @@ uint8_t exit_vb = 0;
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+
 #include "mednafen/vb/vb.h"
 #include "mednafen/vb/timer.h"
 #include "mednafen/vb/vsu.h"
 #include "mednafen/vb/vip.h"
 #include "mednafen/vb/input.h"
-#include "mednafen/mempatcher.h"
 #include "mednafen/hw_cpu/v810/v810_cpu.h"
 
 #include "games_database_patch.h"
@@ -100,9 +100,6 @@ static uint32 GPRAM_Mask;
 static uint8_t *GPROM = NULL;
 static uint32 GPROM_Mask;
 
-V810 *VB_V810 = NULL;
-
-VSU *VB_VSU = NULL;
 static uint32 VSU_CycleFix;
 
 static uint8_t WCR;
@@ -122,6 +119,7 @@ MDFNGI EmulatedVB =
 	384,   // Framebuffer width
 	224,   // Framebuffer height
 	2,     // Number of output sound channels
+	44100, // Sound frequency
 };
 
 MDFNGI *MDFNGameInfo = &EmulatedVB;
@@ -139,10 +137,10 @@ static INLINE void RecalcIntLevel(void)
       }
    }
 
-   VB_V810->SetInt(ilevel);
+   V810_SetInt(ilevel);
 }
 
-extern "C" void VBIRQ_Assert(int source, bool assert)
+void VBIRQ_Assert(int source, bool assert)
 {
    /*assert(source >= 0 && source <= 4);*/
 
@@ -154,7 +152,7 @@ extern "C" void VBIRQ_Assert(int source, bool assert)
    RecalcIntLevel();
 }
 
-static uint8_t HWCTRL_Read(v810_timestamp_t &timestamp, uint32 A)
+static uint8_t HWCTRL_Read(v810_timestamp_t timestamp, uint32 A)
 {
    uint8_t ret = 0;
 
@@ -188,7 +186,7 @@ static uint8_t HWCTRL_Read(v810_timestamp_t &timestamp, uint32 A)
    return(ret);
 }
 
-static void HWCTRL_Write(v810_timestamp_t &timestamp, uint32 A, uint8_t V)
+static void HWCTRL_Write(v810_timestamp_t timestamp, uint32 A, uint8_t V)
 {
    /* HWCtrl Bogus Write? */
    if(A & 0x3)
@@ -215,9 +213,9 @@ static void HWCTRL_Write(v810_timestamp_t &timestamp, uint32 A, uint8_t V)
    }
 }
 
-uint8_t MDFN_FASTCALL MemRead8(v810_timestamp_t &timestamp, uint32 A)
+uint8 MDFN_FASTCALL MemRead8(v810_timestamp_t timestamp, uint32 A)
 {
-   uint8_t ret = 0;
+   uint8 ret = 0;
    A &= (1 << 27) - 1;
 
    //if((A >> 24) <= 2)
@@ -253,7 +251,7 @@ uint8_t MDFN_FASTCALL MemRead8(v810_timestamp_t &timestamp, uint32 A)
    return(ret);
 }
 
-uint16 MDFN_FASTCALL MemRead16(v810_timestamp_t &timestamp, uint32 A)
+uint16 MDFN_FASTCALL MemRead16(v810_timestamp_t timestamp, uint32 A)
 {
  uint16 ret = 0;
 
@@ -293,7 +291,7 @@ uint16 MDFN_FASTCALL MemRead16(v810_timestamp_t &timestamp, uint32 A)
  return(ret);
 }
 
-void MDFN_FASTCALL MemWrite8(v810_timestamp_t &timestamp, uint32 A, uint8_t V)
+void MDFN_FASTCALL MemWrite8(v810_timestamp_t timestamp, uint32 A, uint8_t V)
 {
  A &= (1 << 27) - 1;
 
@@ -305,7 +303,7 @@ void MDFN_FASTCALL MemWrite8(v810_timestamp_t &timestamp, uint32 A, uint8_t V)
   case 0: VIP_Write8(timestamp, A, V);
           break;
 
-  case 1: VB_VSU->Write((timestamp + VSU_CycleFix) >> 2, A, V);
+  case 1: VSU_Write((timestamp + VSU_CycleFix) >> 2, A, V);
           break;
 
   case 2: HWCTRL_Write(timestamp, A, V);
@@ -327,7 +325,7 @@ void MDFN_FASTCALL MemWrite8(v810_timestamp_t &timestamp, uint32 A, uint8_t V)
  }
 }
 
-void MDFN_FASTCALL MemWrite16(v810_timestamp_t &timestamp, uint32 A, uint16 V)
+void MDFN_FASTCALL MemWrite16(v810_timestamp_t timestamp, uint32 A, uint16 V)
 {
  A &= (1 << 27) - 1;
 
@@ -339,7 +337,7 @@ void MDFN_FASTCALL MemWrite16(v810_timestamp_t &timestamp, uint32 A, uint16 V)
   case 0: VIP_Write16(timestamp, A, V);
           break;
 
-  case 1: VB_VSU->Write((timestamp + VSU_CycleFix) >> 2, A, V);
+  case 1: VSU_Write((timestamp + VSU_CycleFix) >> 2, A, V);
           break;
 
   case 2: HWCTRL_Write(timestamp, A, V);
@@ -401,9 +399,9 @@ static void RebaseTS(const v810_timestamp_t timestamp)
 	next_input_ts -= timestamp;
 }
 
-extern "C" void VB_SetEvent(const int type, const v810_timestamp_t next_timestamp)
+void VB_SetEvent(const int type, const v810_timestamp_t next_timestamp)
 {
-   //assert(next_timestamp > VB_V810->v810_timestamp);
+   //assert(next_timestamp > V810_v810_timestamp);
 
 	if(type == VB_EVENT_VIP)
 		next_vip_ts = next_timestamp;
@@ -412,8 +410,8 @@ extern "C" void VB_SetEvent(const int type, const v810_timestamp_t next_timestam
 	else if(type == VB_EVENT_INPUT)
 		next_input_ts = next_timestamp;
 
-	if(next_timestamp < VB_V810->GetEventNT())
-		VB_V810->SetEventNT(next_timestamp);
+	if(next_timestamp < V810_GetEventNT())
+		V810_SetEventNT(next_timestamp);
 }
 
 static int32 MDFN_FASTCALL EventHandler(const v810_timestamp_t timestamp)
@@ -437,7 +435,7 @@ static void ForceEventUpdates(const v810_timestamp_t timestamp)
 	next_timer_ts = TIMER_Update(timestamp);
 	next_input_ts = VBINPUT_Update(timestamp);
 
-	VB_V810->SetEventNT(CalcNextTS());
+	V810_SetEventNT(CalcNextTS());
 	//printf("FEU: %d %d %d\n", next_vip_ts, next_timer_ts, next_input_ts);
 }
 
@@ -446,19 +444,19 @@ static void VB_Power(void)
 	memset(WRAM, 0, 65536);
 
 	VIP_Power();
-	VB_VSU->Power();
+	VSU_Power();
 	TIMER_Power();
 	VBINPUT_Power();
 
 	EventReset();
 	IRQ_Asserted = 0;
 	RecalcIntLevel();
-	VB_V810->Reset();
+	V810_Reset();
 
 	VSU_CycleFix = 0;
 	WCR = 0;
 
-	ForceEventUpdates(0);  //VB_V810->v810_timestamp);
+	ForceEventUpdates(0);  //V810_v810_timestamp);
 }
 
 static void SettingChanged(const char *name)
@@ -515,6 +513,50 @@ static INLINE uint32 round_up_pow2(uint32 v)
 	return(v);
 }
 
+#define DEF_VECTOR(type) \
+typedef struct vector_##type { \
+  type * data; \
+  size_t alloc_size; \
+  size_t size; \
+} vector_##type; \
+\
+void init_vector_##type(vector_##type * vector) \
+{ \
+  vector->data = NULL; \
+  vector->alloc_size = vector->size = 0; \
+} \
+\
+void clear_vector_##type(vector_##type * vector) \
+{ \
+  if (vector->data != NULL) {\
+    free(vector->data); \
+    init_vector_##type(vector);  \
+  } \
+} \
+\
+void push_back_vector_##type(vector_##type * vector, type value) \
+{ \
+  if (vector->size == vector->alloc_size) { \
+    vector->alloc_size = (vector->alloc_size == 0) ? 16 : vector->alloc_size * 2; \
+    vector->data = realloc(vector->data, vector->alloc_size * sizeof(type)); \
+     \
+    if (vector->data == NULL) { \
+      /* do what you want */ \
+    } \
+  } \
+  vector->data[vector->size++] = value; \
+} \
+\
+type at_vector_##type(vector_##type * vector, size_t index) \
+{ \
+  if (index >= vector->size) { \
+    /* do what you want */ \
+  } \
+  return vector->data[index]; \
+}
+
+DEF_VECTOR(uint32)
+
 static int Load(const uint8_t *data, size_t size)
 {
    /* VB ROM image size is not a power of 2??? */
@@ -531,34 +573,33 @@ static int Load(const uint8_t *data, size_t size)
 
    printf("ROM:       %dKiB\n", (int)(size / 1024));
 
-   VB_V810 = new V810();
-   VB_V810->Init();
+   V810_Init();
 
-   VB_V810->SetMemReadHandlers(MemRead8, MemRead16, NULL);
-   VB_V810->SetMemWriteHandlers(MemWrite8, MemWrite16, NULL);
+   /*V810_SetMemReadHandlers(MemRead8, MemRead16, NULL);
+   V810_SetMemWriteHandlers(MemWrite8, MemWrite16, NULL);
 
-   VB_V810->SetIOReadHandlers(MemRead8, MemRead16, NULL);
-   VB_V810->SetIOWriteHandlers(MemWrite8, MemWrite16, NULL);
+   V810_SetIOReadHandlers(MemRead8, MemRead16, NULL);
+   V810_SetIOWriteHandlers(MemWrite8, MemWrite16, NULL);*/
 
    for(int i = 0; i < 256; i++)
    {
-      VB_V810->SetMemReadBus32(i, false);
-      VB_V810->SetMemWriteBus32(i, false);
+      V810_SetMemReadBus32(i, false);
+      V810_SetMemWriteBus32(i, false);
    }
 
-   std::vector<uint32> Map_Addresses;
+   vector_uint32 Map_Addresses;
+   init_vector_uint32(&Map_Addresses);
 
    for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
    {
       for(uint64 sub_A = 5 << 24; sub_A < (6 << 24); sub_A += 65536)
       {
-         Map_Addresses.push_back(A + sub_A);
+         push_back_vector_uint32(&Map_Addresses, A + sub_A);
       }
    }
 
-   WRAM = VB_V810->SetFastMap(&Map_Addresses[0], 65536, Map_Addresses.size(), "WRAM");
-   Map_Addresses.clear();
-
+   WRAM = V810_SetFastMap(&Map_Addresses.data[0], 65536, Map_Addresses.size, "WRAM");
+   clear_vector_uint32(&Map_Addresses);
 
    // Round up the ROM size to 65536(we mirror it a little later)
    GPROM_Mask = (size < 65536) ? (65536 - 1) : (size - 1);
@@ -567,14 +608,14 @@ static int Load(const uint8_t *data, size_t size)
    {
       for(uint64 sub_A = 7 << 24; sub_A < (8 << 24); sub_A += GPROM_Mask + 1)
       {
-         Map_Addresses.push_back(A + sub_A);
+         push_back_vector_uint32(&Map_Addresses, A + sub_A);
          //printf("%08x\n", (uint32)(A + sub_A));
       }
    }
 
 
-   GPROM = VB_V810->SetFastMap(&Map_Addresses[0], GPROM_Mask + 1, Map_Addresses.size(), "Cart ROM");
-   Map_Addresses.clear();
+   GPROM = V810_SetFastMap(&Map_Addresses.data[0], GPROM_Mask + 1, Map_Addresses.size, "Cart ROM");
+   clear_vector_uint32(&Map_Addresses);
 
    // Mirror ROM images < 64KiB to 64KiB
    for(uint64 i = 0; i < 65536; i += size)
@@ -587,18 +628,18 @@ static int Load(const uint8_t *data, size_t size)
       for(uint64 sub_A = 6 << 24; sub_A < (7 << 24); sub_A += GPRAM_Mask + 1)
       {
          //printf("GPRAM: %08x\n", A + sub_A);
-         Map_Addresses.push_back(A + sub_A);
+         push_back_vector_uint32(&Map_Addresses, A + sub_A);
       }
    }
 
 
-   GPRAM = VB_V810->SetFastMap(&Map_Addresses[0], GPRAM_Mask + 1, Map_Addresses.size(), "Cart RAM");
-   Map_Addresses.clear();
+   GPRAM = V810_SetFastMap(&Map_Addresses.data[0], GPRAM_Mask + 1, Map_Addresses.size, "Cart RAM");
+   clear_vector_uint32(&Map_Addresses);
 
    memset(GPRAM, 0, GPRAM_Mask + 1);
 
    VIP_Init();
-   VB_VSU = new VSU(&sbuf[0], &sbuf[1]);
+   VSU_Init(&sbuf[0], &sbuf[1]);
    VBINPUT_Init();
 
    VB3DMode = MDFN_GetSettingUI("vb.3dmode");
@@ -665,23 +706,12 @@ static int Load(const uint8_t *data, size_t size)
    MDFNGameInfo->lcm_width = MDFNGameInfo->fb_width;
    MDFNGameInfo->lcm_height = MDFNGameInfo->fb_height;
 
-
-   MDFNMP_Init(32768, ((uint64)1 << 27) / 32768);
-   MDFNMP_AddRAM(65536, 5 << 24, WRAM);
-   if((GPRAM_Mask + 1) >= 32768)
-      MDFNMP_AddRAM(GPRAM_Mask + 1, 6 << 24, GPRAM);
    return(1);
 }
 
 static void CloseGame(void)
 {
    //VIP_Kill();
-
-   if(VB_VSU)
-   {
-      delete VB_VSU;
-      VB_VSU = NULL;
-   }
 
    /*
       if(GPRAM)
@@ -696,25 +726,16 @@ static void CloseGame(void)
       GPROM = NULL;
       }
       */
-
-   if(VB_V810)
-   {
-      VB_V810->Kill();
-      delete VB_V810;
-      VB_V810 = NULL;
-   }
 }
 
-extern "C" void VB_ExitLoop(void)
+void VB_ExitLoop(void)
 {
-   VB_V810->Exit();
+   V810_Exit();
 }
 
 static void Emulate(EmulateSpecStruct *espec, int16_t *sound_buf)
 {
 	v810_timestamp_t v810_timestamp;
-
-	//MDFNMP_ApplyPeriodicCheats();
 
 	VBINPUT_Frame();
 
@@ -730,12 +751,12 @@ static void Emulate(EmulateSpecStruct *espec, int16_t *sound_buf)
 
 	VIP_StartFrame(espec);
 
-	v810_timestamp = VB_V810->Run(EventHandler);
+	v810_timestamp = V810_Run(EventHandler);
 
 	FixNonEvents();
 	ForceEventUpdates(v810_timestamp);
 
-	VB_VSU->EndFrame((v810_timestamp + VSU_CycleFix) >> 2);
+	VSU_EndFrame((v810_timestamp + VSU_CycleFix) >> 2);
 
 	if(sound_buf)
 	{
@@ -756,12 +777,12 @@ static void Emulate(EmulateSpecStruct *espec, int16_t *sound_buf)
 
    RebaseTS(v810_timestamp);
 
-   VB_V810->ResetTS(0);
+   V810_ResetTS(0);
 }
 
-extern "C" int StateAction(StateMem *sm, int load, int data_only)
+int StateAction(StateMem *sm, int load, int data_only)
 {
-   const v810_timestamp_t timestamp = VB_V810->v810_timestamp;
+   const v810_timestamp_t timestamp = v810_timestamp;
    int ret = 1;
 
    SFORMAT StateRegs[] =
@@ -776,9 +797,9 @@ extern "C" int StateAction(StateMem *sm, int load, int data_only)
 
    ret &= MDFNSS_StateAction(sm, load, data_only, StateRegs, "MAIN", false);
 
-   ret &= VB_V810->StateAction(sm, load, data_only);
+   ret &= V810_StateAction(sm, load, data_only);
 
-   ret &= VB_VSU->StateAction(sm, load, data_only);
+   ret &= VSU_StateAction(sm, load, data_only);
    ret &= TIMER_StateAction(sm, load, data_only);
    ret &= VBINPUT_StateAction(sm, load, data_only);
    ret &= VIP_StateAction(sm, load, data_only);
@@ -809,9 +830,6 @@ static bool MDFNI_LoadGame(const uint8_t *data, size_t size)
    if(Load(data, size) <= 0)
       goto error;
 
-   MDFN_LoadGameCheats(NULL);
-   MDFNMP_InstallReadPatches();
-
    return true;
 
 error:
@@ -825,11 +843,8 @@ static void MDFNI_CloseGame(void)
    if(!MDFNGameInfo)
       return;
 
-   MDFN_FlushGameCheats(0);
 
    CloseGame();
-
-   MDFNMP_Kill();
 
    MDFNGameInfo = NULL;
 }
@@ -1142,20 +1157,8 @@ size_t retro_get_memory_size(unsigned type)
    return 0;
 }
 
-void retro_cheat_reset(void) { }
-void retro_cheat_set(unsigned, bool, const char *) { }
-
 void MDFND_DispMessage(unsigned char *str)
 {
-}
-
-void MDFND_MidSync(const EmulateSpecStruct *) { }
-
-void MDFN_MidLineUpdate(EmulateSpecStruct *espec, int y)
-{
-#if 0
-   MDFND_MidLineUpdate(espec, y);
-#endif
 }
 
 void MDFND_PrintError(const char* err)

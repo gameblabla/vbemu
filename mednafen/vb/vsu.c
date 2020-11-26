@@ -22,9 +22,59 @@
 
 #include "vsu.h"
 
+
+static void VSU_CalcCurrentOutput(int ch, int *left, int *right);
+
+static void VSU_Update(int32 timestamp);
+
+static uint8 IntlControl[6];
+static uint8 LeftLevel[6];
+static uint8 RightLevel[6];
+static uint16 Frequency[6];
+static uint16 EnvControl[6];	// Channel 5/6 extra functionality tacked on too.
+
+static uint8 RAMAddress[6];
+
+static uint8 SweepControl;
+
+static uint8 WaveData[5][0x20];
+
+static uint8 ModData[0x20];
+
+static int32 EffFreq[6];
+static int32 Envelope[6];
+
+static int32 WavePos[6];
+static int32 ModWavePos;
+
+static int32 LatcherClockDivider[6];
+
+static int32 FreqCounter[6];
+static int32 IntervalCounter[6];
+static int32 EnvelopeCounter[6];
+static int32 SweepModCounter;
+
+static int32 EffectsClockDivider[6];
+static int32 IntervalClockDivider[6];
+static int32 EnvelopeClockDivider[6];
+static int32 SweepModClockDivider;
+
+static int32 NoiseLatcherClockDivider;
+static uint32 NoiseLatcher;
+
+static uint32 lfsr;
+
+static int32 last_output[6][2];
+static int32 last_ts;
+
+static Blip_Buffer *bb_l;
+static Blip_Buffer *bb_r;
+static Blip_Synth Synth;
+static Blip_Synth NoiseSynth;
+
 static const unsigned int Tap_LUT[8] = { 15 - 1, 11 - 1, 14 - 1, 5 - 1, 9 - 1, 7 - 1, 10 - 1, 12 - 1 };
 
-VSU::VSU(Blip_Buffer *_bb_l, Blip_Buffer *_bb_r)
+void VSU_Init(Blip_Buffer *_bb_l, Blip_Buffer *_bb_r)
 {
    unsigned ch, lr;
 
@@ -38,12 +88,8 @@ VSU::VSU(Blip_Buffer *_bb_l, Blip_Buffer *_bb_r)
          last_output[ch][lr] = 0;
 }
 
-VSU::~VSU()
-{
 
-}
-
-void VSU::Power(void)
+void VSU_Power(void)
 {
    unsigned ch;
 
@@ -84,11 +130,11 @@ void VSU::Power(void)
    last_ts = 0;
 }
 
-void VSU::Write(int32 timestamp, uint32 A, uint8 V)
+void VSU_Write(int32 timestamp, uint32 A, uint8 V)
 {
    A &= 0x7FF;
 
-   Update(timestamp);
+   VSU_Update(timestamp);
 
    //printf("VSU Write: %d, %08x %02x\n", timestamp, A, V);
 
@@ -205,7 +251,7 @@ void VSU::Write(int32 timestamp, uint32 A, uint8 V)
    }
 }
 
-INLINE void VSU::CalcCurrentOutput(int ch, int *left, int *right)
+INLINE void VSU_CalcCurrentOutput(int ch, int *left, int *right)
 {
    int WD;
    int l_ol, r_ol;
@@ -243,7 +289,7 @@ INLINE void VSU::CalcCurrentOutput(int ch, int *left, int *right)
    *right = WD * r_ol;
 }
 
-void VSU::Update(int32 timestamp)
+void VSU_Update(int32 timestamp)
 {
    int left, right;
    unsigned ch;
@@ -254,7 +300,7 @@ void VSU::Update(int32 timestamp)
       int32 running_timestamp = last_ts;
 
       // Output sound here
-      CalcCurrentOutput(ch, &left, &right);
+      VSU_CalcCurrentOutput(ch, &left, &right);
       Blip_Synth_offset(&Synth, running_timestamp, left - last_output[ch][0], bb_l);
       Blip_Synth_offset(&Synth, running_timestamp, right - last_output[ch][1], bb_r);
       last_output[ch][0] = left;
@@ -433,7 +479,7 @@ void VSU::Update(int32 timestamp)
          running_timestamp += chunk_clocks;
 
          // Output sound here too.
-         CalcCurrentOutput(ch, &left, &right);
+         VSU_CalcCurrentOutput(ch, &left, &right);
          Blip_Synth_offset(&Synth, running_timestamp, left - last_output[ch][0], bb_l);
          Blip_Synth_offset(&Synth, running_timestamp, right - last_output[ch][1], bb_r);
          last_output[ch][0] = left;
@@ -444,13 +490,13 @@ void VSU::Update(int32 timestamp)
    last_ts = timestamp;
 }
 
-void VSU::EndFrame(int32 timestamp)
+void VSU_EndFrame(int32 timestamp)
 {
-   Update(timestamp);
+   VSU_Update(timestamp);
    last_ts = 0;
 }
 
-int VSU::StateAction(StateMem *sm, int load, int data_only)
+int VSU_StateAction(StateMem *sm, int load, int data_only)
 {
    SFORMAT StateRegs[] =
    {
@@ -495,31 +541,31 @@ int VSU::StateAction(StateMem *sm, int load, int data_only)
    return MDFNSS_StateAction(sm, load, data_only, StateRegs, "VSU", false);
 }
 
-uint8 VSU::PeekWave(const unsigned int which, uint32 Address)
+uint8 VSU_PeekWave(const unsigned int which, uint32 Address)
 {
-   assert(which <= 4);
+   //assert(which <= 4);
 
    Address &= 0x1F;
 
    return(WaveData[which][Address]);
 }
 
-void VSU::PokeWave(const unsigned int which, uint32 Address, uint8 value)
+void VSU_PokeWave(const unsigned int which, uint32 Address, uint8 value)
 {
-   assert(which <= 4);
+   //assert(which <= 4);
 
    Address &= 0x1F;
 
    WaveData[which][Address] = value & 0x3F;
 }
 
-uint8 VSU::PeekModWave(uint32 Address)
+uint8 VSU_PeekModWave(uint32 Address)
 {
    Address &= 0x1F;
    return(ModData[Address]);
 }
 
-void VSU::PokeModWave(uint32 Address, uint8 value)
+void VSU_PokeModWave(uint32 Address, uint8 value)
 {
    Address &= 0x1F;
 

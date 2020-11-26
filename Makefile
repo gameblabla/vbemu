@@ -1,13 +1,13 @@
 PRGNAME     = vb.elf
-CC          = clang
-CXX 		= clang
+CC          = gcc
+CXX 		= g++
 
 #### Configuration
 
 # Possible values : retrostone, rs97, rs90
-PORT = gcw0
+PORT = sdl
 # Possible values : alsa, oss, portaudio
-SOUND_ENGINE = pulse
+SOUND_ENGINE = sdl
 
 #### End of Configuration
 
@@ -19,11 +19,11 @@ INCLUDES	+= -Imednafen -I./mednafen/vb -I./mednafen/sound -I. -Ishell/emu -Imedn
 
 DEFINES		= -DLSB_FIRST -DINLINE="inline" -DINLINE="inline" -DNDEBUG -DWANT_STEREO_SOUND
 DEFINES		+= -DMEDNAFEN_VERSION_NUMERIC=931
-DEFINES		+= -DWANT_16BPP -DFRONTEND_SUPPORTS_RGB565
+DEFINES		+= -DWANT_8BPP -DFRONTEND_SUPPORTS_RGB565
 
 CFLAGS		= -O0 -g3 -fno-common -Wall -Wextra -Wunused-value $(INCLUDES) $(DEFINES)
 CXXFLAGS	= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
-LDFLAGS     = -lc -lgcc -lstdc++ -lm -lSDL -lz -pthread
+LDFLAGS     = -nodefaultlibs -lc -lgcc -lm -lSDL -lz
 
 ifeq ($(SOUND_ENGINE), alsa)
 LDFLAGS 		+= -lasound

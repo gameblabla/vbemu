@@ -161,9 +161,6 @@ typedef struct
 
  int soundchan; 	// Number of output sound channels.
 
-
- int rotated;
-
  int soundrate;  /* For Ogg Vorbis expansion sound wacky support.  0 for default. */
 } MDFNGI;
 

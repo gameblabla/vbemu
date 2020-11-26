@@ -43,9 +43,10 @@ found freely through public domain sources.
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <algorithm>
 
 #include <boolean.h>
+
+#include "../../mednafen-types.h"
 
 #include "../../masmem.h"
 #include "../../math_ops.h"
@@ -54,7 +55,141 @@ found freely through public domain sources.
 #include "v810_opt.h"
 #include "v810_cpu.h"
 
-V810::V810()
+#define min(a,b) ({ __typeof__ (a) _a = (a); __typeof__ (b) _b = (b); _a < _b ? _a : _b; })
+#define max(a,b) ({ __typeof__ (a) _a = (a); __typeof__ (b) _b = (b); _a > _b ? _a : _b; })
+
+// Make sure P_REG[] is the first variable/array in this class, so non-zerfo offset encoding(at assembly level) isn't necessary to access it.
+static uint32 P_REG[32];  // Program registers pr0-pr31
+static uint32 S_REG[32];  // System registers sr0-sr31
+static uint8 *PC_ptr;
+static uint8 *PC_base;
+static uint32 IPendingCache;
+static void RecalcIPendingCache(void);
+
+static v810_timestamp_t next_event_ts = 0x7FFFFFFF;
+v810_timestamp_t v810_timestamp = 0;
+
+static void V810_Run_Fast(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp)) NO_INLINE;
+
+extern uint8 MDFN_FASTCALL MemRead8(v810_timestamp_t timestamp, uint32 A);
+extern uint16 MDFN_FASTCALL MemRead16(v810_timestamp_t timestamp, uint32 A);
+extern void MDFN_FASTCALL MemWrite8(v810_timestamp_t timestamp, uint32 A, uint8_t V);
+extern void MDFN_FASTCALL MemWrite16(v810_timestamp_t timestamp, uint32 A, uint16 V);
+
+/*uint8 MDFN_FASTCALL (*MemRead8)(v810_timestamp_t timestamp, uint32 A);
+uint16 MDFN_FASTCALL (*MemRead16)(v810_timestamp_t timestamp, uint32 A);*/
+uint32 MDFN_FASTCALL (*MemRead32)(v810_timestamp_t timestamp, uint32 A);
+
+/*void MDFN_FASTCALL (*MemWrite8)(v810_timestamp_t timestamp, uint32 A, uint8 V);
+void MDFN_FASTCALL (*MemWrite16)(v810_timestamp_t timestamp, uint32 A, uint16 V);
+*/
+void MDFN_FASTCALL (*MemWrite32)(v810_timestamp_t timestamp, uint32 A, uint32 V);
+
+uint8 MDFN_FASTCALL (*IORead8)(v810_timestamp_t timestamp, uint32 A);
+uint16 MDFN_FASTCALL (*IORead16)(v810_timestamp_t timestamp, uint32 A);
+uint32 MDFN_FASTCALL (*IORead32)(v810_timestamp_t timestamp, uint32 A);
+
+void MDFN_FASTCALL (*IOWrite8)(v810_timestamp_t timestamp, uint32 A, uint8 V);
+void MDFN_FASTCALL (*IOWrite16)(v810_timestamp_t timestamp, uint32 A, uint16 V);
+
+INLINE void V810_SetFlag(uint32 n, bool condition);
+INLINE void V810_SetSZ(uint32 value);
+
+void MDFN_FASTCALL (*IOWrite32)(v810_timestamp_t timestamp, uint32 A, uint32 V);
+
+static bool MemReadBus32[256];      // Corresponding to the upper 8 bits of the memory address map.
+static bool MemWriteBus32[256];
+
+static int32 lastop;    // Set to -1 on FP/MUL/DIV, 0x100 on LD, 0x200 on ST, 0x400 on in, 0x800 on out, and the actual opcode * 2(or >= 0) on everything else.
+
+#define LASTOP_LD       0x100
+#define LASTOP_ST       0x200
+#define LASTOP_IN       0x400
+#define LASTOP_OUT      0x800
+
+enum
+{
+	HALT_NONE = 0,
+	HALT_HALT = 1,
+	HALT_FATAL_EXCEPTION = 2
+};
+
+static uint8 Halted;
+static bool Running;
+static int ilevel;
+static bool in_bstr;
+static uint16 in_bstr_to;
+
+bool bstr_subop(v810_timestamp_t timestamp, int sub_op, int arg1);
+void fpu_subop(v810_timestamp_t timestamp, int sub_op, int arg1, int arg2);
+void V810_Exception(uint32 handler, uint16 eCode);
+
+// Caching-related:
+typedef struct
+{
+	uint32 tag;
+	uint32 data[2];
+	bool data_valid[2];
+} V810_CacheEntry_t;
+V810_CacheEntry_t Cache[128];
+
+// Bitstring variables.
+static uint32 src_cache;
+static uint32 dst_cache;
+static bool have_src_cache, have_dst_cache;
+
+static uint8 *FastMap[(1ULL << 32) / V810_FAST_MAP_PSIZE];
+static uint8* FastMapAllocList;
+
+// For CacheDump and CacheRestore
+void V810_CacheOpMemStore(v810_timestamp_t timestamp, uint32 A, uint32 V);
+uint32 V810_CacheOpMemLoad(v810_timestamp_t timestamp, uint32 A);
+
+void V810_CacheClear(v810_timestamp_t timestamp, uint32 start, uint32 count);
+void V810_CacheDump(v810_timestamp_t timestamp, const uint32 SA);
+void V810_CacheRestore(v810_timestamp_t timestamp, const uint32 SA);
+
+uint32 V810_RDCACHE(v810_timestamp_t timestamp, uint32 addr);
+//
+// End caching related
+//
+
+uint16 V810_RDOP(v810_timestamp_t timestamp, uint32 addr, uint32 meow);
+void V810_SetFlag(uint32 n, bool condition);
+void V810_SetSZ(uint32 value);
+void V810_SetSREG(v810_timestamp_t timestamp, unsigned int which, uint32 value);
+uint32 V810_GetSREG(unsigned int which);
+bool V810_IsSubnormal(uint32 fpval);
+void V810_FPU_Math_Template(float32 (*func)(float32, float32), uint32 arg1, uint32 arg2);
+void V810_FPU_DoException(void);
+bool V810_CheckFPInputException(uint32 fpval);
+bool V810_FPU_DoesExceptionKillResult(void);
+void V810_SetFPUOPNonFPUFlags(uint32 result);
+
+uint32 V810_BSTR_RWORD(v810_timestamp_t timestamp, uint32 A);
+void V810_BSTR_WWORD(v810_timestamp_t timestamp, uint32 A, uint32 V);
+bool V810_Do_BSTR_Search(v810_timestamp_t timestamp, const int inc_mul, unsigned int bit_test);
+uint8 DummyRegion[V810_FAST_MAP_PSIZE + V810_FAST_MAP_TRAMPOLINE_SIZE];
+
+/* extern only */
+INLINE void V810_ResetTS(v810_timestamp_t new_base_timestamp)
+{
+	next_event_ts -= (v810_timestamp - new_base_timestamp);
+	v810_timestamp = new_base_timestamp;
+}
+
+INLINE void V810_SetEventNT(const v810_timestamp_t timestamp)
+{
+	next_event_ts = timestamp;
+}
+
+INLINE v810_timestamp_t V810_GetEventNT(void)
+{
+	return(next_event_ts);
+}
+
+/*
+V810_V810()
 {
  MemRead8 = NULL;
  MemRead16 = NULL;
@@ -80,36 +215,32 @@ V810::V810()
  v810_timestamp = 0;
  next_event_ts = 0x7FFFFFFF;
 }
+*/
 
-V810::~V810()
+static INLINE void RecalcIPendingCache(void)
 {
+	IPendingCache = 0;
 
-}
+	// Of course don't generate an interrupt if there's not one pending!
+	if(ilevel < 0)
+		return;
 
-INLINE void V810::RecalcIPendingCache(void)
-{
- IPendingCache = 0;
+	// If CPU is halted because of a fatal exception, don't let an interrupt
+	// take us out of this halted status.
+	if(Halted == HALT_FATAL_EXCEPTION) 
+		return;
 
- // Of course don't generate an interrupt if there's not one pending!
- if(ilevel < 0)
-  return;
+	// If the NMI pending, exception pending, and/or interrupt disabled bit
+	// is set, don't accept any interrupts.
+	if(S_REG[PSW] & (PSW_NP | PSW_EP | PSW_ID))
+		return;
 
- // If CPU is halted because of a fatal exception, don't let an interrupt
- // take us out of this halted status.
- if(Halted == HALT_FATAL_EXCEPTION) 
-  return;
+	// If the interrupt level is lower than the interrupt enable level, don't
+	// accept it.
+	if(ilevel < (int)((S_REG[PSW] & PSW_IA) >> 16))
+		return;
 
- // If the NMI pending, exception pending, and/or interrupt disabled bit
- // is set, don't accept any interrupts.
- if(S_REG[PSW] & (PSW_NP | PSW_EP | PSW_ID))
-  return;
-
- // If the interrupt level is lower than the interrupt enable level, don't
- // accept it.
- if(ilevel < (int)((S_REG[PSW] & PSW_IA) >> 16))
-  return;
-
- IPendingCache = 0xFF;
+	IPendingCache = 0xFF;
 }
 
 
@@ -121,51 +252,51 @@ INLINE void V810::RecalcIPendingCache(void)
 // and try to restore cache from an interrupt acknowledge register or dump it to a register
 // controlling interrupt masks...  I wanna be sadistic~
 
-void V810::CacheClear(v810_timestamp_t &timestamp, uint32 start, uint32 count)
+void V810_CacheClear(v810_timestamp_t timestamp, uint32 start, uint32 count)
 {
- //printf("Cache clear: %08x %08x\n", start, count);
- for(uint32 i = 0; i < count && (i + start) < 128; i++)
-  memset(&Cache[i + start], 0, sizeof(V810_CacheEntry_t));
+	//printf("Cache clear: %08x %08x\n", start, count);
+	for(uint32 i = 0; i < count && (i + start) < 128; i++)
+		memset(&Cache[i + start], 0, sizeof(V810_CacheEntry_t));
 }
 
-INLINE void V810::CacheOpMemStore(v810_timestamp_t &timestamp, uint32 A, uint32 V)
+INLINE void V810_CacheOpMemStore(v810_timestamp_t timestamp, uint32 A, uint32 V)
 {
- if(MemWriteBus32[A >> 24])
- {
-  timestamp += 2;
-  MemWrite32(timestamp, A, V);
- }
- else
- {
-  timestamp += 2;
-  MemWrite16(timestamp, A, V & 0xFFFF);
+	if(MemWriteBus32[A >> 24])
+	{
+		timestamp += 2;
+		MemWrite32(timestamp, A, V);
+	}
+	else
+	{
+		timestamp += 2;
+		MemWrite16(timestamp, A, V & 0xFFFF);
 
-  timestamp += 2;
-  MemWrite16(timestamp, A | 2, V >> 16);
- }
+		timestamp += 2;
+		MemWrite16(timestamp, A | 2, V >> 16);
+	}
 }
 
-INLINE uint32 V810::CacheOpMemLoad(v810_timestamp_t &timestamp, uint32 A)
+INLINE uint32 V810_CacheOpMemLoad(v810_timestamp_t timestamp, uint32 A)
 {
- if(MemReadBus32[A >> 24])
- {
-  timestamp += 2;
-  return(MemRead32(timestamp, A));
- }
- else
- {
-  uint32 ret;
+	if(MemReadBus32[A >> 24])
+	{
+		timestamp += 2;
+		return(MemRead32(timestamp, A));
+	}
+	else
+	{
+		uint32 ret;
 
-  timestamp += 2;
-  ret = MemRead16(timestamp, A);
+		timestamp += 2;
+		ret = MemRead16(timestamp, A);
 
-  timestamp += 2;
-  ret |= MemRead16(timestamp, A | 2) << 16;
-  return(ret);
- }
+		timestamp += 2;
+		ret |= MemRead16(timestamp, A | 2) << 16;
+		return(ret);
+	}
 }
 
-void V810::CacheDump(v810_timestamp_t &timestamp, const uint32 SA)
+void V810_CacheDump(v810_timestamp_t timestamp, const uint32 SA)
 {
 #if 0
  printf("Cache dump: %08x\n", SA);
@@ -173,20 +304,20 @@ void V810::CacheDump(v810_timestamp_t &timestamp, const uint32 SA)
 
  for(int i = 0; i < 128; i++)
  {
-  CacheOpMemStore(timestamp, SA + i * 8 + 0, Cache[i].data[0]);
-  CacheOpMemStore(timestamp, SA + i * 8 + 4, Cache[i].data[1]);
+  V810_CacheOpMemStore(timestamp, SA + i * 8 + 0, Cache[i].data[0]);
+  V810_CacheOpMemStore(timestamp, SA + i * 8 + 4, Cache[i].data[1]);
  }
 
  for(int i = 0; i < 128; i++)
  {
   uint32 icht = Cache[i].tag | ((int)Cache[i].data_valid[0] << 22) | ((int)Cache[i].data_valid[1] << 23);
 
-  CacheOpMemStore(timestamp, SA + 1024 + i * 4, icht);
+  V810_CacheOpMemStore(timestamp, SA + 1024 + i * 4, icht);
  }
 
 }
 
-void V810::CacheRestore(v810_timestamp_t &timestamp, const uint32 SA)
+void V810_CacheRestore(v810_timestamp_t timestamp, const uint32 SA)
 {
 #if 0
  printf("Cache restore: %08x\n", SA);
@@ -194,15 +325,15 @@ void V810::CacheRestore(v810_timestamp_t &timestamp, const uint32 SA)
 
  for(int i = 0; i < 128; i++)
  {
-  Cache[i].data[0] = CacheOpMemLoad(timestamp, SA + i * 8 + 0);
-  Cache[i].data[1] = CacheOpMemLoad(timestamp, SA + i * 8 + 4);
+  Cache[i].data[0] = V810_CacheOpMemLoad(timestamp, SA + i * 8 + 0);
+  Cache[i].data[1] = V810_CacheOpMemLoad(timestamp, SA + i * 8 + 4);
  }
 
  for(int i = 0; i < 128; i++)
  {
   uint32 icht;
 
-  icht = CacheOpMemLoad(timestamp, SA + 1024 + i * 4);
+  icht = V810_CacheOpMemLoad(timestamp, SA + 1024 + i * 4);
 
   Cache[i].tag = icht & ((1 << 22) - 1);
   Cache[i].data_valid[0] = (icht >> 22) & 1;
@@ -211,7 +342,7 @@ void V810::CacheRestore(v810_timestamp_t &timestamp, const uint32 SA)
 }
 
 
-INLINE uint32 V810::RDCACHE(v810_timestamp_t &timestamp, uint32 addr)
+INLINE uint32 V810_RDCACHE(v810_timestamp_t timestamp, uint32 addr)
 {
  const int CI = (addr >> 3) & 0x7F;
  const int SBI = (addr & 4) >> 2;
@@ -260,87 +391,85 @@ INLINE uint32 V810::RDCACHE(v810_timestamp_t &timestamp, uint32 addr)
  return(Cache[CI].data[SBI]);
 }
 
-INLINE uint16 V810::RDOP(v810_timestamp_t &timestamp, uint32 addr, uint32 meow)
+INLINE uint16 V810_RDOP(v810_timestamp_t timestamp, uint32 addr, uint32 meow)
 {
- uint16 ret;
+	if (!meow) meow = 2;
+	uint16 ret;
 
- if(S_REG[CHCW] & 0x2)
- {
-  uint32 d32 = RDCACHE(timestamp, addr);
-  ret = d32 >> ((addr & 2) * 8);
- }
- else
- {
-  timestamp += meow; //++;
-  ret = MemRead16(timestamp, addr);
- }
- return(ret);
+	if(S_REG[CHCW] & 0x2)
+	{
+		uint32 d32 = V810_RDCACHE(timestamp, addr);
+		ret = d32 >> ((addr & 2) * 8);
+	}
+	else
+	{
+		timestamp += meow; //++;
+	ret = MemRead16(timestamp, addr);
+	}
+	return(ret);
 }
 
 #define BRANCH_ALIGN_CHECK(x)	{ if((S_REG[CHCW] & 0x2) && (x & 0x2)) { ADDCLOCK(1); } }
 
 // Reinitialize the defaults in the CPU
-void V810::Reset() 
+void V810_Reset() 
 {
- memset(&Cache, 0, sizeof(Cache));
+	memset(&Cache, 0, sizeof(Cache));
 
- memset(P_REG, 0, sizeof(P_REG));
- memset(S_REG, 0, sizeof(S_REG));
- memset(Cache, 0, sizeof(Cache));
+	memset(P_REG, 0, sizeof(P_REG));
+	memset(S_REG, 0, sizeof(S_REG));
+	memset(Cache, 0, sizeof(Cache));
 
- P_REG[0]      =  0x00000000;
- SetPC(0xFFFFFFF0);
+	P_REG[0]      =  0x00000000;
+	V810_SetPC(0xFFFFFFF0);
 
- S_REG[ECR]    =  0x0000FFF0;
- S_REG[PSW]    =  0x00008000;
+	S_REG[ECR]    =  0x0000FFF0;
+	S_REG[PSW]    =  0x00008000;
 
-  S_REG[PIR]	= 0x00005346;
+	S_REG[PIR]	= 0x00005346;
 
- S_REG[TKCW]   =  0x000000E0;
- Halted = HALT_NONE;
- ilevel = -1;
+	S_REG[TKCW]   =  0x000000E0;
+	Halted = HALT_NONE;
+	ilevel = -1;
 
- lastop = 0;
+	lastop = 0;
 
- in_bstr = false;
+	in_bstr = false;
 
- RecalcIPendingCache();
+	RecalcIPendingCache();
 }
 
-bool V810::Init(void)
+bool V810_Init(void)
 {
- in_bstr = false;
- in_bstr_to = 0;
+	in_bstr = false;
+	in_bstr_to = 0;
 
-  memset(DummyRegion, 0, V810_FAST_MAP_PSIZE);
+	memset(DummyRegion, 0, V810_FAST_MAP_PSIZE);
 
-  for(unsigned int i = V810_FAST_MAP_PSIZE; i < V810_FAST_MAP_PSIZE + V810_FAST_MAP_TRAMPOLINE_SIZE; i += 2)
-  {
-   DummyRegion[i + 0] = 0;
-   DummyRegion[i + 1] = 0x36 << 2;
-  }
+	for(unsigned int i = V810_FAST_MAP_PSIZE; i < V810_FAST_MAP_PSIZE + V810_FAST_MAP_TRAMPOLINE_SIZE; i += 2)
+	{
+		DummyRegion[i + 0] = 0;
+		DummyRegion[i + 1] = 0x36 << 2;
+	}
 
-  for(uint64 A = 0; A < (1ULL << 32); A += V810_FAST_MAP_PSIZE)
-   FastMap[A / V810_FAST_MAP_PSIZE] = DummyRegion - A;
+	for(uint64 A = 0; A < (1ULL << 32); A += V810_FAST_MAP_PSIZE)
+		FastMap[A / V810_FAST_MAP_PSIZE] = DummyRegion - A;
 
- return(true);
+	return(true);
 }
 
-void V810::Kill(void)
+void V810_Kill(void)
 {
- for(unsigned int i = 0; i < FastMapAllocList.size(); i++)
-  free(FastMapAllocList[i]);
-
- FastMapAllocList.clear();
+	if (FastMapAllocList) free(FastMapAllocList);
 }
 
-void V810::SetInt(int level)
+void V810_SetInt(int level)
 {
  ilevel = level;
  RecalcIPendingCache();
 }
 
-uint8 *V810::SetFastMap(uint32 addresses[], uint32 length, unsigned int num_addresses, const char *name)
+uint8 *V810_SetFastMap(uint32 addresses[], uint32 length, unsigned int num_addresses, const char *name)
 {
  uint8 *ret = NULL;
 
@@ -363,44 +492,46 @@ uint8 *V810::SetFastMap(uint32 addresses[], uint32 length, unsigned int num_addr
   }
  }
 
- FastMapAllocList.push_back(ret);
+  FastMapAllocList = ret;
+ //FastMapAllocList.push_back(ret);
 
  return(ret);
 }
 
 
-void V810::SetMemReadBus32(uint8 A, bool value)
+void V810_SetMemReadBus32(uint8 A, bool value)
 {
  MemReadBus32[A] = value;
 }
 
-void V810::SetMemWriteBus32(uint8 A, bool value)
+void V810_SetMemWriteBus32(uint8 A, bool value)
 {
  MemWriteBus32[A] = value;
 }
 
-void V810::SetMemReadHandlers(uint8 MDFN_FASTCALL (*read8)(v810_timestamp_t &, uint32), uint16 MDFN_FASTCALL (*read16)(v810_timestamp_t &, uint32), uint32 MDFN_FASTCALL (*read32)(v810_timestamp_t &, uint32))
+/*void V810_SetMemReadHandlers(uint8 MDFN_FASTCALL (*read8)(v810_timestamp_t , uint32), uint16 MDFN_FASTCALL (*read16)(v810_timestamp_t , uint32), uint32 MDFN_FASTCALL (*read32)(v810_timestamp_t , uint32))
 {
  MemRead8 = read8;
  MemRead16 = read16;
  MemRead32 = read32;
 }
 
-void V810::SetMemWriteHandlers(void MDFN_FASTCALL (*write8)(v810_timestamp_t &, uint32, uint8), void MDFN_FASTCALL (*write16)(v810_timestamp_t &, uint32, uint16), void MDFN_FASTCALL (*write32)(v810_timestamp_t &, uint32, uint32))
+void V810_SetMemWriteHandlers(void MDFN_FASTCALL (*write8)(v810_timestamp_t , uint32, uint8), void MDFN_FASTCALL (*write16)(v810_timestamp_t , uint32, uint16), void MDFN_FASTCALL (*write32)(v810_timestamp_t , uint32, uint32))
 {
  MemWrite8 = write8;
  MemWrite16 = write16;
  MemWrite32 = write32;
 }
+*/
 
-void V810::SetIOReadHandlers(uint8 MDFN_FASTCALL (*read8)(v810_timestamp_t &, uint32), uint16 MDFN_FASTCALL (*read16)(v810_timestamp_t &, uint32), uint32 MDFN_FASTCALL (*read32)(v810_timestamp_t &, uint32))
+void V810_SetIOReadHandlers(uint8 MDFN_FASTCALL (*read8)(v810_timestamp_t , uint32), uint16 MDFN_FASTCALL (*read16)(v810_timestamp_t , uint32), uint32 MDFN_FASTCALL (*read32)(v810_timestamp_t , uint32))
 {
  IORead8 = read8;
  IORead16 = read16;
  IORead32 = read32;
 }
 
-void V810::SetIOWriteHandlers(void MDFN_FASTCALL (*write8)(v810_timestamp_t &, uint32, uint8), void MDFN_FASTCALL (*write16)(v810_timestamp_t &, uint32, uint16), void MDFN_FASTCALL (*write32)(v810_timestamp_t &, uint32, uint32))
+void V810_SetIOWriteHandlers(void MDFN_FASTCALL (*write8)(v810_timestamp_t , uint32, uint8), void MDFN_FASTCALL (*write16)(v810_timestamp_t , uint32, uint16), void MDFN_FASTCALL (*write32)(v810_timestamp_t , uint32, uint32))
 {
  IOWrite8 = write8;
  IOWrite16 = write16;
@@ -408,7 +539,7 @@ void V810::SetIOWriteHandlers(void MDFN_FASTCALL (*write8)(v810_timestamp_t &, u
 }
 
 
-INLINE void V810::SetFlag(uint32 n, bool condition)
+INLINE void V810_SetFlag(uint32 n, bool condition)
 {
  S_REG[PSW] &= ~n;
 
@@ -416,15 +547,15 @@ INLINE void V810::SetFlag(uint32 n, bool condition)
   S_REG[PSW] |= n;
 }
 	
-INLINE void V810::SetSZ(uint32 value)
+INLINE void V810_SetSZ(uint32 value)
 {
- SetFlag(PSW_Z, !value);
- SetFlag(PSW_S, value & 0x80000000);
+ V810_SetFlag(PSW_Z, !value);
+ V810_SetFlag(PSW_S, value & 0x80000000);
 }
 
 #define SetPREG(n, val) { P_REG[n] = val; }
 
-INLINE void V810::SetSREG(v810_timestamp_t &timestamp, unsigned int which, uint32 value)
+INLINE void V810_SetSREG(v810_timestamp_t timestamp, unsigned int which, uint32 value)
 {
 	switch(which)
 	{
@@ -478,20 +609,20 @@ INLINE void V810::SetSREG(v810_timestamp_t &timestamp, unsigned int which, uint3
 
               	 case 0x00: break;
 
-              	 case 0x01: CacheClear(timestamp, (value >> 20) & 0xFFF, (value >> 8) & 0xFFF);
+              	 case 0x01: V810_CacheClear(timestamp, (value >> 20) & 0xFFF, (value >> 8) & 0xFFF);
                             break;
 
-              	 case 0x10: CacheDump(timestamp, value & ~0xFF);
+              	 case 0x10: V810_CacheDump(timestamp, value & ~0xFF);
                             break;
 
-              	 case 0x20: CacheRestore(timestamp, value & ~0xFF);
+              	 case 0x20: V810_CacheRestore(timestamp, value & ~0xFF);
                             break;
                	}
 		break;
 	}
 }
 
-INLINE uint32 V810::GetSREG(unsigned int which)
+INLINE uint32 V810_GetSREG(unsigned int which)
 {
 #if 0
    if(which != 24 && which != 25 && which >= 8)
@@ -500,9 +631,9 @@ INLINE uint32 V810::GetSREG(unsigned int which)
 	return S_REG[which];
 }
 
-#define RB_SETPC(new_pc_raw) 										\
+#define V810_RB_SETPC(new_pc_raw) 										\
 			  {										\
-			   const uint32 new_pc = new_pc_raw;	/* So RB_SETPC(RB_GETPC()) won't mess up */	\
+			   const uint32 new_pc = new_pc_raw;	/* So V810_RB_SETPC(RB_GETPC()) won't mess up */	\
 			   {										\
 			    PC_ptr = &FastMap[(new_pc) >> V810_FAST_MAP_SHIFT][(new_pc)];		\
 			    PC_base = PC_ptr - (new_pc);						\
@@ -513,7 +644,7 @@ INLINE uint32 V810::GetSREG(unsigned int which)
 				{				\
 				 uint32 PC_tmp = RB_GETPC();	\
 				 PC_tmp += (delta);		\
-				 RB_SETPC(PC_tmp);		\
+				 V810_RB_SETPC(PC_tmp);		\
 				}					\
 			      }
 
@@ -534,7 +665,7 @@ INLINE uint32 V810::GetSREG(unsigned int which)
 #define RB_RDOP(PC_offset, ...) LoadU16_LE((uint16 *)&PC_ptr[PC_offset])
 #endif
 
-void V810::Run_Fast(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp))
+static void V810_Run_Fast(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp))
 {
  #define RB_ADDBT(n,o,p)
  #define RB_CPUHOOK(n)
@@ -551,46 +682,46 @@ void V810::Run_Fast(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t 
 #undef RB_GETPC
 #undef RB_RDOP
 
-v810_timestamp_t V810::Run(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp))
+v810_timestamp_t V810_Run(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp))
 {
 	Running = true;
-	Run_Fast(event_handler);
+	V810_Run_Fast(event_handler);
 	return(v810_timestamp);
 }
 
-void V810::Exit(void)
+void V810_Exit(void)
 {
 	Running = false;
 }
 
-uint32 V810::GetPC(void)
+uint32 V810_GetPC(void)
 {
  return(PC_ptr - PC_base);
 }
 
-void V810::SetPC(uint32 new_pc)
+void V810_SetPC(uint32 new_pc)
 {
   PC_ptr = &FastMap[new_pc >> V810_FAST_MAP_SHIFT][new_pc];
   PC_base = PC_ptr - new_pc;
 }
 
-uint32 V810::GetPR(const unsigned int which)
+uint32 V810_GetPR(const unsigned int which)
 {
  return(which ? P_REG[which] : 0);
 }
 
-void V810::SetPR(const unsigned int which, uint32 value)
+void V810_SetPR(const unsigned int which, uint32 value)
 {
  if(which)
   P_REG[which] = value;
 }
 
-uint32 V810::GetSR(const unsigned int which)
+uint32 V810_GetSR(const unsigned int which)
 {
- return(GetSREG(which));
+ return(V810_GetSREG(which));
 }
 
-void V810::SetSR(const unsigned int which, uint32 value)
+void V810_SetSR(const unsigned int which, uint32 value)
 {
 // SetSREG(timestamp, which, value);
 }
@@ -607,7 +738,7 @@ void V810::SetSR(const unsigned int which, uint32 value)
 #define BSTR_OP_ORN dst_cache |= (((src_cache >> srcoff) & 1) ^ 1) << dstoff;
 #define BSTR_OP_ANDN dst_cache &= ~(((src_cache >> srcoff) & 1) << dstoff);
 
-INLINE uint32 V810::BSTR_RWORD(v810_timestamp_t &timestamp, uint32 A)
+INLINE uint32 V810_BSTR_RWORD(v810_timestamp_t timestamp, uint32 A)
 {
  if(MemReadBus32[A >> 24])
  {
@@ -627,7 +758,7 @@ INLINE uint32 V810::BSTR_RWORD(v810_timestamp_t &timestamp, uint32 A)
  }
 }
 
-INLINE void V810::BSTR_WWORD(v810_timestamp_t &timestamp, uint32 A, uint32 V)
+INLINE void V810_BSTR_WWORD(v810_timestamp_t timestamp, uint32 A, uint32 V)
 {
  if(MemWriteBus32[A >> 24])
  {
@@ -650,13 +781,13 @@ INLINE void V810::BSTR_WWORD(v810_timestamp_t &timestamp, uint32 A, uint32 V)
                  if(!have_src_cache)                            \
                  {                                              \
 		  have_src_cache = true;			\
-                  src_cache = BSTR_RWORD(timestamp, src);       \
+                  src_cache = V810_BSTR_RWORD(timestamp, src);       \
                  }                                              \
 								\
 		 if(!have_dst_cache)				\
 		 {						\
 		  have_dst_cache = true;			\
-                  dst_cache = BSTR_RWORD(timestamp, dst);       \
+                  dst_cache = V810_BSTR_RWORD(timestamp, dst);       \
                  }                                              \
 								\
 		 op;						\
@@ -672,7 +803,7 @@ INLINE void V810::BSTR_WWORD(v810_timestamp_t &timestamp, uint32 A, uint32 V)
 								\
                  if(!dstoff)                                    \
                  {                                              \
-                  BSTR_WWORD(timestamp, dst, dst_cache);        \
+                  V810_BSTR_WWORD(timestamp, dst, dst_cache);        \
                   dst += 4;                                     \
 		  have_dst_cache = false;			\
 		  if(timestamp >= next_event_ts)		\
@@ -680,10 +811,10 @@ INLINE void V810::BSTR_WWORD(v810_timestamp_t &timestamp, uint32 A, uint32 V)
                  }                                              \
                 }						\
                 if(have_dst_cache)				\
-                 BSTR_WWORD(timestamp, dst, dst_cache);		\
+                 V810_BSTR_WWORD(timestamp, dst, dst_cache);		\
 		}
 
-INLINE bool V810::Do_BSTR_Search(v810_timestamp_t &timestamp, const int inc_mul, unsigned int bit_test)
+INLINE bool V810_Do_BSTR_Search(v810_timestamp_t timestamp, const int inc_mul, unsigned int bit_test)
 {
         uint32 srcoff = (P_REG[27] & 0x1F);
         uint32 len = P_REG[28];
@@ -706,7 +837,7 @@ INLINE bool V810::Do_BSTR_Search(v810_timestamp_t &timestamp, const int inc_mul,
 		{
 		 have_src_cache = true;
 		 timestamp++;
-		 src_cache = BSTR_RWORD(timestamp, src);
+		 src_cache = V810_BSTR_RWORD(timestamp, src);
 		}
 
 		if(((src_cache >> srcoff) & 1) == bit_test)
@@ -742,9 +873,9 @@ INLINE bool V810::Do_BSTR_Search(v810_timestamp_t &timestamp, const int inc_mul,
 
 
         if(found)               // Set Z flag to 0 if the bit was found
-         SetFlag(PSW_Z, 0);
+         V810_SetFlag(PSW_Z, 0);
         else if(!len)           // ...and if the search is over, and the bit was not found, set it to 1
-         SetFlag(PSW_Z, 1);
+         V810_SetFlag(PSW_Z, 1);
 
         if(found)               // Bit found, so don't continue the search.
          return(false);
@@ -752,7 +883,7 @@ INLINE bool V810::Do_BSTR_Search(v810_timestamp_t &timestamp, const int inc_mul,
         return((bool)len);      // Continue the search if any bits are left to search.
 }
 
-bool V810::bstr_subop(v810_timestamp_t &timestamp, int sub_op, int arg1)
+bool bstr_subop(v810_timestamp_t timestamp, int sub_op, int arg1)
 {
    if((sub_op >= 0x10) || (!(sub_op & 0x8) && sub_op >= 0x4))
    {
@@ -760,8 +891,8 @@ bool V810::bstr_subop(v810_timestamp_t &timestamp, int sub_op, int arg1)
       printf("%08x\tBSR Error: %04x\n", PC,sub_op);
 #endif
 
-      SetPC(GetPC() - 2);
-      Exception(INVALID_OP_HANDLER_ADDR, ECODE_INVALID_OP);
+      V810_SetPC(V810_GetPC() - 2);
+      V810_Exception(INVALID_OP_HANDLER_ADDR, ECODE_INVALID_OP);
 
       return(false);
    }
@@ -775,104 +906,6 @@ bool V810::bstr_subop(v810_timestamp_t &timestamp, int sub_op, int arg1)
       uint32 len =     P_REG[28];
       uint32 dst =    (P_REG[29] & 0xFFFFFFFC);
       uint32 src =    (P_REG[30] & 0xFFFFFFFC);
-
-#if 0
-      // Be careful not to cause 32-bit integer overflow, and careful about not shifting by 32.
-      // TODO:
-
-      // Read src[0], src[4] into shifter.
-      // Read dest[0].
-      DO_BSTR_PROLOGUE();	// if(len) { blah blah blah masking blah }
-   src_cache = BSTR_RWORD(timestamp, src);
-
-   if((uint64)(srcoff + len) > 0x20)
-      src_cache |= (uint64)BSTR_RWORD(timestamp, src + 4) << 32;
-
-   dst_cache = BSTR_RWORD(timestamp, dst);
-
-   if(len)
-   {
-      uint32 dst_preserve_mask;
-      uint32 dst_change_mask;
-
-      dst_preserve_mask = (1U << dstoff) - 1;
-
-      if((uint64)(dstoff + len) < 0x20)
-         dst_preserve_mask |= ((1U << ((0x20 - (dstoff + len)) & 0x1F)) - 1) << (dstoff + len);
-
-      dst_change_mask = ~dst_preserve_mask;
-
-      src_cache = BSTR_RWORD(timestamp, src);
-      src_cache |= (uint64)BSTR_RWORD(timestamp, src + 4) << 32;
-      dst_cache = BSTR_RWORD(timestamp, dst);
-
-      dst_cache = (dst_cache & dst_preserve_mask) | ((dst_cache OP_THINGY_HERE (src_cache >> srcoff)) & dst_change_mask);
-      BSTR_WWORD(timestamp, dst, dst_cache);
-
-      if((uint64)(dstoff + len) < 0x20)
-      {
-         srcoff += len;
-         dstoff += len;
-         len = 0;
-      }
-      else
-      {
-         srcoff += (0x20 - dstoff);
-         dstoff = 0;
-         len -= (0x20 - dstoff);
-         dst += 4;
-      }
-
-      if(srcoff >= 0x20)
-      {
-         srcoff &= 0x1F;
-         src += 4;
-
-         if(len)
-         {
-            src_cache >>= 32;
-            src_cache |= (uint64)BSTR_RWORD(timestamp, src + 4) << 32;
-         }
-      }
-   }
-
-   DO_BSTR_PRIMARY();	// while(len >= 32) (do allow interruption; interrupt and emulator-return -
-   // they must be handled differently!)
-   while(len >= 32)
-   {
-      dst_cache = BSTR_RWORD(timestamp, dst);
-      dst_cache = OP_THINGY_HERE(dst_cache, src_cache >> srcoff);
-      BSTR_WWORD(timestamp, dst, dst_cache);
-      len -= 32;
-      dst += 4;
-      src += 4;
-      src_cache >>= 32;
-      src_cache |= (uint64)BSTR_RWORD(timestamp, src + 4) << 32;
-   }
-
-   DO_BSTR_EPILOGUE();	// if(len) { blah blah blah masking blah }
-   if(len)
-   {
-      uint32 dst_preserve_mask;
-      uint32 dst_change_mask;
-
-      dst_preserve_mask = (1U << ((0x20 - len) & 0x1F) << len;
-            dst_change_mask = ~dst_preserve_mask;
-
-            dst_cache = BSTR_RWORD(timestamp, dst);
-            dst_cache = OP_THINGY_HERE(dst_cache, src_cache >> srcoff);
-            BSTR_WWORD(timestamp, dst, dst_cache);
-            dstoff += len;
-            srcoff += len;
-
-            if(srcoff >= 0x20)
-            {
-            srcoff &= 0x1F;
-            src += 4;
-            }
-            len = 0;
-            }
-#endif
 
             switch(sub_op)
             {
@@ -906,31 +939,31 @@ bool V810::bstr_subop(v810_timestamp_t &timestamp, int sub_op, int arg1)
       printf("BSTR Search: %02x\n", sub_op);
 #endif
 
-   return(Do_BSTR_Search(timestamp, ((sub_op & 1) ? -1 : 1), (sub_op & 0x2) >> 1));
+   return(V810_Do_BSTR_Search(timestamp, ((sub_op & 1) ? -1 : 1), (sub_op & 0x2) >> 1));
 }
 
-INLINE void V810::SetFPUOPNonFPUFlags(uint32 result)
+INLINE void V810_SetFPUOPNonFPUFlags(uint32 result)
 {
                  // Now, handle flag setting
-                 SetFlag(PSW_OV, 0);
+                 V810_SetFlag(PSW_OV, 0);
 
                  if(!(result & 0x7FFFFFFF)) // Check to see if exponent and mantissa are 0
 		 {
 		  // If Z flag is set, S and CY should be clear, even if it's negative 0(confirmed on real thing with subf.s, at least).
-                  SetFlag(PSW_Z, 1);
-                  SetFlag(PSW_S, 0);
-                  SetFlag(PSW_CY, 0);
+                  V810_SetFlag(PSW_Z, 1);
+                  V810_SetFlag(PSW_S, 0);
+                  V810_SetFlag(PSW_CY, 0);
 		 }
                  else
 		 {
-                  SetFlag(PSW_Z, 0);
-                  SetFlag(PSW_S, result & 0x80000000);
-                  SetFlag(PSW_CY, result & 0x80000000);
+                  V810_SetFlag(PSW_Z, 0);
+                  V810_SetFlag(PSW_S, result & 0x80000000);
+                  V810_SetFlag(PSW_CY, result & 0x80000000);
 		 }
                  //printf("MEOW: %08x\n", S_REG[PSW] & (PSW_S | PSW_CY));
 }
 
-INLINE bool V810::CheckFPInputException(uint32 fpval)
+INLINE bool V810_CheckFPInputException(uint32 fpval)
 {
  // Zero isn't a subnormal! (OR IS IT *DUN DUN DUNNN* ;b)
  if(!(fpval & 0x7FFFFFFF))
@@ -945,15 +978,15 @@ INLINE bool V810::CheckFPInputException(uint32 fpval)
 
 	 S_REG[PSW] |= PSW_FRO;
 
-	 SetPC(GetPC() - 4);
-	 Exception(FPU_HANDLER_ADDR, ECODE_FRO);
+	 V810_SetPC(V810_GetPC() - 4);
+	 V810_Exception(FPU_HANDLER_ADDR, ECODE_FRO);
 	}
 	return(true);	// Yes, exception occurred
  }
  return(false);	// No, no exception occurred.
 }
 
-bool V810::FPU_DoesExceptionKillResult(void)
+bool V810_FPU_DoesExceptionKillResult(void)
 {
  if(float_exception_flags & float_flag_invalid)
   return(true);
@@ -975,7 +1008,7 @@ bool V810::FPU_DoesExceptionKillResult(void)
  return(false);
 }
 
-void V810::FPU_DoException(void)
+void V810_FPU_DoException(void)
 {
  if(float_exception_flags & float_flag_invalid)
  {
@@ -983,8 +1016,8 @@ void V810::FPU_DoException(void)
 
   S_REG[PSW] |= PSW_FIV;
 
-  SetPC(GetPC() - 4);
-  Exception(FPU_HANDLER_ADDR, ECODE_FIV);
+  V810_SetPC(V810_GetPC() - 4);
+  V810_Exception(FPU_HANDLER_ADDR, ECODE_FIV);
 
   return;
  }
@@ -995,8 +1028,8 @@ void V810::FPU_DoException(void)
 
   S_REG[PSW] |= PSW_FZD;
 
-  SetPC(GetPC() - 4);
-  Exception(FPU_HANDLER_ADDR, ECODE_FZD);
+  V810_SetPC(V810_GetPC() - 4);
+  V810_Exception(FPU_HANDLER_ADDR, ECODE_FZD);
 
   return;
  }
@@ -1021,12 +1054,12 @@ void V810::FPU_DoException(void)
 
   S_REG[PSW] |= PSW_FOV;
 
-  SetPC(GetPC() - 4);
-  Exception(FPU_HANDLER_ADDR, ECODE_FOV);
+  V810_SetPC(V810_GetPC() - 4);
+  V810_Exception(FPU_HANDLER_ADDR, ECODE_FOV);
  }
 }
 
-bool V810::IsSubnormal(uint32 fpval)
+bool V810_IsSubnormal(uint32 fpval)
 {
  if( ((fpval >> 23) & 0xFF) == 0 && (fpval & ((1 << 23) - 1)) )
   return(true);
@@ -1034,9 +1067,9 @@ bool V810::IsSubnormal(uint32 fpval)
  return(false);
 }
 
-INLINE void V810::FPU_Math_Template(float32 (*func)(float32, float32), uint32 arg1, uint32 arg2)
+INLINE void V810_FPU_Math_Template(float32 (*func)(float32, float32), uint32 arg1, uint32 arg2)
 {
- if(CheckFPInputException(P_REG[arg1]) || CheckFPInputException(P_REG[arg2]))
+ if(V810_CheckFPInputException(P_REG[arg1]) || V810_CheckFPInputException(P_REG[arg2]))
  {
 
  }
@@ -1047,7 +1080,7 @@ INLINE void V810::FPU_Math_Template(float32 (*func)(float32, float32), uint32 ar
   float_exception_flags = 0;
   result = func(P_REG[arg1], P_REG[arg2]);
 
-  if(IsSubnormal(result))
+  if(V810_IsSubnormal(result))
   {
    float_exception_flags |= float_flag_underflow;
    float_exception_flags |= float_flag_inexact;
@@ -1055,20 +1088,20 @@ INLINE void V810::FPU_Math_Template(float32 (*func)(float32, float32), uint32 ar
 
   //printf("Result: %08x, %02x; %02x\n", result, (result >> 23) & 0xFF, float_exception_flags);
 
-  if(!FPU_DoesExceptionKillResult())
+  if(!V810_FPU_DoesExceptionKillResult())
   {
    // Force it to +/- zero before setting S/Z based off of it(confirmed with subf.s on real V810, at least).
    if(float_exception_flags & float_flag_underflow)
     result &= 0x80000000;
 
-   SetFPUOPNonFPUFlags(result);
+   V810_SetFPUOPNonFPUFlags(result);
    SetPREG(arg1, result);
   }
-  FPU_DoException();
+  V810_FPU_DoException();
  }
 }
 
-void V810::fpu_subop(v810_timestamp_t &timestamp, int sub_op, int arg1, int arg2)
+void fpu_subop(v810_timestamp_t timestamp, int sub_op, int arg1, int arg2)
 {
   switch(sub_op)
   {
@@ -1114,8 +1147,8 @@ void V810::fpu_subop(v810_timestamp_t &timestamp, int sub_op, int arg1, int arg2
         // Virtual-Boy specific(probably!)
 	default:
 		{
-		 SetPC(GetPC() - 4);
-                 Exception(INVALID_OP_HANDLER_ADDR, ECODE_INVALID_OP);
+		 V810_SetPC(V810_GetPC() - 4);
+                 V810_Exception(INVALID_OP_HANDLER_ADDR, ECODE_INVALID_OP);
 		}
 		break;
 
@@ -1127,22 +1160,22 @@ void V810::fpu_subop(v810_timestamp_t &timestamp, int sub_op, int arg1, int arg2
                  float_exception_flags = 0;
 		 result = int32_to_float32((int32)P_REG[arg2]);
 
-		 if(!FPU_DoesExceptionKillResult())
+		 if(!V810_FPU_DoesExceptionKillResult())
 		 {
 		  SetPREG(arg1, result);
-		  SetFPUOPNonFPUFlags(result);
+		  V810_SetFPUOPNonFPUFlags(result);
 		 }
 #if 0
 		 else
 		  puts("Exception on CVT.WS?????");	/* This shouldn't happen, but just in case there's a bug... */
 #endif
-		 FPU_DoException();
+		 V810_FPU_DoException();
 		}
 		break;	// End CVT.WS
 
 	case CVT_SW:
 		timestamp += 8;
-                if(CheckFPInputException(P_REG[arg2]))
+                if(V810_CheckFPInputException(P_REG[arg2]))
                 {
 
                 }
@@ -1153,71 +1186,71 @@ void V810::fpu_subop(v810_timestamp_t &timestamp, int sub_op, int arg1, int arg2
                  float_exception_flags = 0;
 		 result = float32_to_int32(P_REG[arg2]);
 
-		 if(!FPU_DoesExceptionKillResult())
+		 if(!V810_FPU_DoesExceptionKillResult())
 		 {
 		  SetPREG(arg1, result);
-                  SetFlag(PSW_OV, 0);
-                  SetSZ(result);
+                  V810_SetFlag(PSW_OV, 0);
+                  V810_SetSZ(result);
 		 }
-		 FPU_DoException();
+		 V810_FPU_DoException();
 		}
 		break;	// End CVT.SW
 
 	case ADDF_S: timestamp += 8;
-		     FPU_Math_Template(float32_add, arg1, arg2);
+		     V810_FPU_Math_Template(float32_add, arg1, arg2);
 		     break;
 
 	case SUBF_S: timestamp += 11;
-		     FPU_Math_Template(float32_sub, arg1, arg2);
+		     V810_FPU_Math_Template(float32_sub, arg1, arg2);
 		     break;
 
         case CMPF_S: timestamp += 6;
 		     // Don't handle this like subf.s because the flags
 		     // have slightly different semantics(mostly regarding underflow/subnormal results) (confirmed on real V810).
-                     if(CheckFPInputException(P_REG[arg1]) || CheckFPInputException(P_REG[arg2]))
+                     if(V810_CheckFPInputException(P_REG[arg1]) || V810_CheckFPInputException(P_REG[arg2]))
                      {
 
                      }
 		     else
 		     {
-		      SetFlag(PSW_OV, 0);
+		      V810_SetFlag(PSW_OV, 0);
 
 		      if(float32_eq(P_REG[arg1], P_REG[arg2]))
 		      {
-		       SetFlag(PSW_Z, 1);
-		       SetFlag(PSW_S, 0);
-		       SetFlag(PSW_CY, 0);
+		       V810_SetFlag(PSW_Z, 1);
+		       V810_SetFlag(PSW_S, 0);
+		       V810_SetFlag(PSW_CY, 0);
 		      }
 		      else
 		      {
-		       SetFlag(PSW_Z, 0);
+		       V810_SetFlag(PSW_Z, 0);
 
 		       if(float32_lt(P_REG[arg1], P_REG[arg2]))
 		       {
-		        SetFlag(PSW_S, 1);
-		        SetFlag(PSW_CY, 1);
+		        V810_SetFlag(PSW_S, 1);
+		        V810_SetFlag(PSW_CY, 1);
 		       }
 		       else
 		       {
-		        SetFlag(PSW_S, 0);
-		        SetFlag(PSW_CY, 0);
+		        V810_SetFlag(PSW_S, 0);
+		        V810_SetFlag(PSW_CY, 0);
                        }
 		      }
 		     }	// else of if(CheckFP...
                      break;
 
 	case MULF_S: timestamp += 7;
-		     FPU_Math_Template(float32_mul, arg1, arg2);
+		     V810_FPU_Math_Template(float32_mul, arg1, arg2);
 		     break;
 
 	case DIVF_S: timestamp += 43;
-		     FPU_Math_Template(float32_div, arg1, arg2);
+		     V810_FPU_Math_Template(float32_div, arg1, arg2);
 		     break;
 
 	case TRNC_SW:
                 timestamp += 7;
 
-		if(CheckFPInputException(P_REG[arg2]))
+		if(V810_CheckFPInputException(P_REG[arg2]))
 		{
 
 		}
@@ -1228,20 +1261,20 @@ void V810::fpu_subop(v810_timestamp_t &timestamp, int sub_op, int arg1, int arg2
 		 float_exception_flags = 0;
                  result = float32_to_int32_round_to_zero(P_REG[arg2]);
 
-                 if(!FPU_DoesExceptionKillResult())
+                 if(!V810_FPU_DoesExceptionKillResult())
                  {
                   SetPREG(arg1, result);
-		  SetFlag(PSW_OV, 0);
-		  SetSZ(result);
+		  V810_SetFlag(PSW_OV, 0);
+		  V810_SetSZ(result);
                  }
-		 FPU_DoException();
+		 V810_FPU_DoException();
                 }
                 break;	// end TRNC.SW
 	}
 }
 
 // Generate exception
-void V810::Exception(uint32 handler, uint16 eCode) 
+void V810_Exception(uint32 handler, uint16 eCode) 
 {
  // Exception overhead is unknown.
 
@@ -1265,7 +1298,7 @@ void V810::Exception(uint32 handler, uint16 eCode)
     }
     else if(S_REG[PSW] & PSW_EP)  //Double Exception
     {
-     S_REG[FEPC] = GetPC();
+     S_REG[FEPC] = V810_GetPC();
      S_REG[FEPSW] = S_REG[PSW];
 
      S_REG[ECR] = (S_REG[ECR] & 0xFFFF) | (eCode << 16);
@@ -1273,31 +1306,31 @@ void V810::Exception(uint32 handler, uint16 eCode)
      S_REG[PSW] |= PSW_ID;
      S_REG[PSW] &= ~PSW_AE;
 
-     SetPC(0xFFFFFFD0);
+     V810_SetPC(0xFFFFFFD0);
      IPendingCache = 0;
      return;
     }
     else 	// Regular exception
     {
-     S_REG[EIPC] = GetPC();
+     S_REG[EIPC] = V810_GetPC();
      S_REG[EIPSW] = S_REG[PSW];
      S_REG[ECR] = (S_REG[ECR] & 0xFFFF0000) | eCode;
      S_REG[PSW] |= PSW_EP;
      S_REG[PSW] |= PSW_ID;
      S_REG[PSW] &= ~PSW_AE;
 
-     SetPC(handler);
+     V810_SetPC(handler);
      IPendingCache = 0;
      return;
     }
 }
 
-int V810::StateAction(StateMem *sm, int load, int data_only)
+int V810_StateAction(StateMem *sm, int load, int data_only)
 {
  uint32 *cache_tag_temp = NULL;
  uint32 *cache_data_temp = NULL;
  bool *cache_data_valid_temp = NULL;
- uint32 PC_tmp = GetPC();
+ uint32 PC_tmp = V810_GetPC();
 
  int32 next_event_ts_delta = next_event_ts - v810_timestamp;
 
@@ -1336,11 +1369,11 @@ int V810::StateAction(StateMem *sm, int load, int data_only)
   // std::min<int64>(0x7FF... is a sanity check and for the case where next_event_ts is set to an extremely large value to
   // denote that it's not happening anytime soon, which could cause an overflow if our current timestamp is larger
   // than what it was when the state was saved.
-  next_event_ts = std::max<int64>(v810_timestamp, std::min<int64>(0x7FFFFFFF, (int64)v810_timestamp + next_event_ts_delta));
+  next_event_ts = max(v810_timestamp, min(0x7FFFFFFF, (int64)v810_timestamp + next_event_ts_delta));
 
   RecalcIPendingCache();
 
-  SetPC(PC_tmp);
+  V810_SetPC(PC_tmp);
  }
 
  return(ret);

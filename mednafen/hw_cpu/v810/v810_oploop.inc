@@ -18,14 +18,8 @@
  */
 
 
-    // Macro test taken from http://gcc.gnu.org/viewcvs/trunk/gcc/testsuite/gcc.dg/20020919-1.c?view=markup&pathrev=142696
-    //#if defined (__powerpc__) || defined (__PPC__) || defined (__ppc__)	|| defined (__POWERPC__) || defined (PPC) || defined (_IBMR2) 
-    //	v810_timestamp_t timestamp_rl asm("15") = v810_timestamp;
-    //#elif defined(__x86_64__)
-    //	v810_timestamp_t timestamp_rl asm("r11") = v810_timestamp;
-    //#else
 	v810_timestamp_t timestamp_rl = v810_timestamp;
-    //#endif
+	v810_timestamp_t timestamp;
 
     uint32 opcode;
     uint32 tmp2;
@@ -70,7 +64,7 @@
 	{
 	 //printf("%08x\n", RB_GETPC());
 	 {
-	  v810_timestamp_t timestamp = timestamp_rl;
+		timestamp = timestamp_rl;
 
 	  tmpop = RB_RDOP(0, 0);
 
@@ -150,7 +144,7 @@
 
 	#include "v810_do_am.h"
 
-	 #define BEGIN_OP(meowtmpop) { op_##meowtmpop: v810_timestamp_t timestamp = timestamp_rl; DO_##meowtmpop ##_AM();
+	 #define BEGIN_OP(meowtmpop) { op_##meowtmpop:  timestamp = timestamp_rl; DO_##meowtmpop ##_AM();
 	 #define END_OP()		timestamp_rl = timestamp; goto OpFinished; }
 	 #define END_OP_SKIPLO()       	timestamp_rl = timestamp; goto OpFinishedSkipLO; }
 
@@ -164,11 +158,11 @@
              ADDCLOCK(1);
              uint32 temp = P_REG[arg2] + P_REG[arg1];
 
-             SetFlag(PSW_OV, ((P_REG[arg2]^(~P_REG[arg1]))&(P_REG[arg2]^temp))&0x80000000);
-             SetFlag(PSW_CY, temp < P_REG[arg2]);
+             V810_SetFlag(PSW_OV, ((P_REG[arg2]^(~P_REG[arg1]))&(P_REG[arg2]^temp))&0x80000000);
+             V810_SetFlag(PSW_CY, temp < P_REG[arg2]);
 
              SetPREG(arg2, temp);
-	     SetSZ(P_REG[arg2]);
+	     V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 
@@ -176,11 +170,11 @@
              ADDCLOCK(1);
 	     uint32 temp = P_REG[arg2] - P_REG[arg1];
 
-             SetFlag(PSW_OV, ((P_REG[arg2]^P_REG[arg1])&(P_REG[arg2]^temp))&0x80000000);
-             SetFlag(PSW_CY, temp > P_REG[arg2]);
+             V810_SetFlag(PSW_OV, ((P_REG[arg2]^P_REG[arg1])&(P_REG[arg2]^temp))&0x80000000);
+             V810_SetFlag(PSW_CY, temp > P_REG[arg2]);
 
 	     SetPREG(arg2, temp);
-	     SetSZ(P_REG[arg2]);
+	     V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 
@@ -188,9 +182,9 @@
              ADDCLOCK(1);
  	     uint32 temp = P_REG[arg2] - P_REG[arg1];
 
-	     SetSZ(temp);
-             SetFlag(PSW_OV, ((P_REG[arg2]^P_REG[arg1])&(P_REG[arg2]^temp))&0x80000000);
-	     SetFlag(PSW_CY, temp > P_REG[arg2]);
+	     V810_SetSZ(temp);
+             V810_SetFlag(PSW_OV, ((P_REG[arg2]^P_REG[arg1])&(P_REG[arg2]^temp))&0x80000000);
+	     V810_SetFlag(PSW_CY, temp > P_REG[arg2]);
 	END_OP();
 
 
@@ -199,20 +193,20 @@
             val = P_REG[arg1] & 0x1F;
 
             // set CY before we destroy the regisrer info....
-            SetFlag(PSW_CY, (val != 0) && ((P_REG[arg2] >> (32 - val))&0x01) );
-	    SetFlag(PSW_OV, false);
+            V810_SetFlag(PSW_CY, (val != 0) && ((P_REG[arg2] >> (32 - val))&0x01) );
+	    V810_SetFlag(PSW_OV, false);
             SetPREG(arg2, P_REG[arg2] << val);
-	    SetSZ(P_REG[arg2]);            
+	    V810_SetSZ(P_REG[arg2]);            
 	END_OP();
 			
 	BEGIN_OP(SHR);
             ADDCLOCK(1);
             val = P_REG[arg1] & 0x1F;
             // set CY before we destroy the regisrer info....
-            SetFlag(PSW_CY, (val) && ((P_REG[arg2] >> (val-1))&0x01));
-	    SetFlag(PSW_OV, false);
+            V810_SetFlag(PSW_CY, (val) && ((P_REG[arg2] >> (val-1))&0x01));
+	    V810_SetFlag(PSW_OV, false);
 	    SetPREG(arg2, P_REG[arg2] >> val);
-	    SetSZ(P_REG[arg2]);
+	    V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(JMP);
@@ -220,7 +214,7 @@
 	    (void)arg2;		// arg2 is unused.
 
             ADDCLOCK(3);
-            RB_SETPC((P_REG[arg1] & 0xFFFFFFFE));
+            V810_RB_SETPC((P_REG[arg1] & 0xFFFFFFFE));
 	    RB_ADDBT(old_PC, RB_GETPC(), 0);
 	END_OP();
 
@@ -228,40 +222,40 @@
             ADDCLOCK(1);
             val = P_REG[arg1] & 0x1F;
 			
-	    SetFlag(PSW_CY, (val) && ((P_REG[arg2]>>(val-1))&0x01) );
-	    SetFlag(PSW_OV, false);
+	    V810_SetFlag(PSW_CY, (val) && ((P_REG[arg2]>>(val-1))&0x01) );
+	    V810_SetFlag(PSW_OV, false);
 
 	    SetPREG(arg2, (uint32) ((int32)P_REG[arg2] >> val));
             
-	    SetSZ(P_REG[arg2]);
+	    V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(OR);
             ADDCLOCK(1);
             SetPREG(arg2, P_REG[arg1] | P_REG[arg2]);
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg2]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(AND);
             ADDCLOCK(1);
             SetPREG(arg2, P_REG[arg1] & P_REG[arg2]);
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg2]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(XOR);
             ADDCLOCK(1);
 	    SetPREG(arg2, P_REG[arg1] ^ P_REG[arg2]);
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg2]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(NOT);
             ADDCLOCK(1);
 	    SetPREG(arg2, ~P_REG[arg1]);
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg2]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(MOV_I);
@@ -273,11 +267,11 @@
              ADDCLOCK(1);
              uint32 temp = P_REG[arg2] + sign_5(arg1);
 
-             SetFlag(PSW_OV, ((P_REG[arg2]^(~sign_5(arg1)))&(P_REG[arg2]^temp))&0x80000000);
-	     SetFlag(PSW_CY, (uint32)temp < P_REG[arg2]);
+             V810_SetFlag(PSW_OV, ((P_REG[arg2]^(~sign_5(arg1)))&(P_REG[arg2]^temp))&0x80000000);
+	     V810_SetFlag(PSW_CY, (uint32)temp < P_REG[arg2]);
 
              SetPREG(arg2, (uint32)temp);
-	     SetSZ(P_REG[arg2]);
+	     V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 
@@ -343,49 +337,49 @@
              ADDCLOCK(1);
 	     uint32 temp = P_REG[arg2] - sign_5(arg1);
 
-	     SetSZ(temp);
-             SetFlag(PSW_OV, ((P_REG[arg2]^(sign_5(arg1)))&(P_REG[arg2]^temp))&0x80000000);
-	     SetFlag(PSW_CY, temp > P_REG[arg2]);
+	     V810_SetSZ(temp);
+             V810_SetFlag(PSW_OV, ((P_REG[arg2]^(sign_5(arg1)))&(P_REG[arg2]^temp))&0x80000000);
+	     V810_SetFlag(PSW_CY, temp > P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(SHR_I);
             ADDCLOCK(1);
-	    SetFlag(PSW_CY, arg1 && ((P_REG[arg2] >> (arg1-1))&0x01) );
+	    V810_SetFlag(PSW_CY, arg1 && ((P_REG[arg2] >> (arg1-1))&0x01) );
             // set CY before we destroy the regisrer info....
             SetPREG(arg2, P_REG[arg2] >> arg1);
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg2]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(SHL_I);
             ADDCLOCK(1);
-            SetFlag(PSW_CY, arg1 && ((P_REG[arg2] >> (32 - arg1))&0x01) );
+            V810_SetFlag(PSW_CY, arg1 && ((P_REG[arg2] >> (32 - arg1))&0x01) );
             // set CY before we destroy the regisrer info....
 
             SetPREG(arg2, P_REG[arg2] << arg1);
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg2]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(SAR_I);
             ADDCLOCK(1);
- 	    SetFlag(PSW_CY, arg1 && ((P_REG[arg2]>>(arg1-1))&0x01) );
+ 	    V810_SetFlag(PSW_CY, arg1 && ((P_REG[arg2]>>(arg1-1))&0x01) );
 
             SetPREG(arg2, (uint32) ((int32)P_REG[arg2] >> arg1));
 
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg2]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg2]);
 	END_OP();
 
 	BEGIN_OP(LDSR);		// Loads a Sys Reg with the value in specified PR
              ADDCLOCK(1);	// ?
 
-	     SetSREG(timestamp, arg1 & 0x1F, P_REG[arg2 & 0x1F]);
+	     V810_SetSREG(timestamp, arg1 & 0x1F, P_REG[arg2 & 0x1F]);
 	END_OP();
 
 	BEGIN_OP(STSR);		// Loads a PR with the value in specified Sys Reg
              ADDCLOCK(1);	// ?
-             P_REG[arg2 & 0x1F] = GetSREG(arg1 & 0x1F);
+             P_REG[arg2 & 0x1F] = V810_GetSREG(arg1 & 0x1F);
 	END_OP();
 
         BEGIN_OP(EI);
@@ -505,32 +499,32 @@
              ADDCLOCK(1);
              uint32 temp = P_REG[arg2] + sign_16(arg1);
 
-             SetFlag(PSW_OV, ((P_REG[arg2]^(~sign_16(arg1)))&(P_REG[arg2]^temp))&0x80000000);
-	     SetFlag(PSW_CY, (uint32)temp < P_REG[arg2]);
+             V810_SetFlag(PSW_OV, ((P_REG[arg2]^(~sign_16(arg1)))&(P_REG[arg2]^temp))&0x80000000);
+	     V810_SetFlag(PSW_CY, (uint32)temp < P_REG[arg2]);
 
              SetPREG(arg3, (uint32)temp);
-	     SetSZ(P_REG[arg3]);
+	     V810_SetSZ(P_REG[arg3]);
 	END_OP();
 
 	BEGIN_OP(ORI);
             ADDCLOCK(1);
             SetPREG(arg3, arg1 | P_REG[arg2]);
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg3]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg3]);
 	END_OP();
 
 	BEGIN_OP(ANDI);
             ADDCLOCK(1);
             SetPREG(arg3, (arg1 & P_REG[arg2]));
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg3]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg3]);
 	END_OP();
 
 	BEGIN_OP(XORI);
             ADDCLOCK(1);
 	    SetPREG(arg3, arg1 ^ P_REG[arg2]);
-	    SetFlag(PSW_OV, false);
-	    SetSZ(P_REG[arg3]);
+	    V810_SetFlag(PSW_OV, false);
+	    V810_SetSZ(P_REG[arg3]);
 	END_OP();
 
 	BEGIN_OP(MOVHI);
@@ -780,10 +774,10 @@
 
             //Return from Trap/Interupt
             if(S_REG[PSW] & PSW_NP) { // Read the FE Reg
-                RB_SETPC(S_REG[FEPC] & 0xFFFFFFFE);
+                V810_RB_SETPC(S_REG[FEPC] & 0xFFFFFFFE);
                 S_REG[PSW] = S_REG[FEPSW];
             } else { 	//Read the EI Reg Interupt
-                RB_SETPC(S_REG[EIPC] & 0xFFFFFFFE);
+                V810_RB_SETPC(S_REG[EIPC] & 0xFFFFFFFE);
                 S_REG[PSW] = S_REG[EIPSW];
             }
 	    RecalcIPendingCache();
@@ -798,8 +792,8 @@
 
              SetPREG(30, (uint32)(temp >> 32));
              SetPREG(arg2, temp);
-	     SetSZ(P_REG[arg2]);
-	     SetFlag(PSW_OV, temp != (uint64)(int64)(int32)(uint32)temp);
+	     V810_SetSZ(P_REG[arg2]);
+	     V810_SetFlag(PSW_OV, temp != (uint64)(int64)(int32)(uint32)temp);
 	     lastop = -1;
 	END_OP_SKIPLO();
 
@@ -810,8 +804,8 @@
              SetPREG(30, (uint32)(temp >> 32));
  	     SetPREG(arg2, (uint32)temp);
 
-	     SetSZ(P_REG[arg2]);
-	     SetFlag(PSW_OV, temp != (uint32)temp);
+	     V810_SetSZ(P_REG[arg2]);
+	     V810_SetFlag(PSW_OV, temp != (uint32)temp);
 	     lastop = -1;
 	END_OP_SKIPLO();
 
@@ -820,7 +814,7 @@
             if(P_REG[arg1] == 0) // Divide by zero!
 	    {
 	     RB_DECPCBY2();
-	     Exception(ZERO_DIV_HANDLER_ADDR, ECODE_ZERO_DIV);
+	     V810_Exception(ZERO_DIV_HANDLER_ADDR, ECODE_ZERO_DIV);
 	     CHECK_HALTED();
             } 
 	    else 
@@ -832,8 +826,8 @@
 	     SetPREG(30, remainder);
              SetPREG(arg2, quotient);
 
-	     SetFlag(PSW_OV, false);
-	     SetSZ(quotient);
+	     V810_SetFlag(PSW_OV, false);
+	     V810_SetSZ(quotient);
             }
 	    lastop = -1;
 	END_OP_SKIPLO();
@@ -848,17 +842,17 @@
             if((uint32)P_REG[arg1] == 0) // Divide by zero!
 	    { 
 	     RB_DECPCBY2();
-	     Exception(ZERO_DIV_HANDLER_ADDR, ECODE_ZERO_DIV);
+	     V810_Exception(ZERO_DIV_HANDLER_ADDR, ECODE_ZERO_DIV);
 	     CHECK_HALTED();
             } 
 	    else 
 	    {
                 if((P_REG[arg2]==0x80000000)&&(P_REG[arg1]==0xFFFFFFFF)) 
 		{
-			SetFlag(PSW_OV, true);
+			V810_SetFlag(PSW_OV, true);
 			P_REG[30]=0;
 	                SetPREG(arg2, 0x80000000);
-	                SetSZ(P_REG[arg2]);
+	                V810_SetSZ(P_REG[arg2]);
 		}
 		else
 		{
@@ -869,8 +863,8 @@
 	             SetPREG(30, remainder);
 	             SetPREG(arg2, quotient);
 
-	             SetFlag(PSW_OV, false);
-	             SetSZ(quotient);
+	             V810_SetFlag(PSW_OV, false);
+	             V810_SetSZ(quotient);
 		}
 	    }
 	    lastop = -1;
@@ -915,7 +909,7 @@
 
             ADDCLOCK(15);
 
-	    Exception(TRAP_HANDLER_BASE + (arg1 & 0x10), ECODE_TRAP_BASE + (arg1 & 0x1F));
+	    V810_Exception(TRAP_HANDLER_BASE + (arg1 & 0x10), ECODE_TRAP_BASE + (arg1 & 0x1F));
 	    CHECK_HALTED();
 	END_OP();
 
@@ -940,9 +934,9 @@
 
              compare_temp = P_REG[arg3] - tmp;
 
-             SetSZ(compare_temp);
-             SetFlag(PSW_OV, ((P_REG[arg3]^tmp)&(P_REG[arg3]^compare_temp))&0x80000000);
-             SetFlag(PSW_CY, compare_temp > P_REG[arg3]);
+             V810_SetSZ(compare_temp);
+             V810_SetFlag(PSW_OV, ((P_REG[arg3]^tmp)&(P_REG[arg3]^compare_temp))&0x80000000);
+             V810_SetFlag(PSW_CY, compare_temp > P_REG[arg3]);
 
 	     if(!compare_temp) // If they're equal...
 	      to_write = P_REG[30];
@@ -969,10 +963,10 @@
 	{
 	 int iNum = ilevel;
 
-	 S_REG[EIPC]  = GetPC();
+	 S_REG[EIPC]  = V810_GetPC();
 	 S_REG[EIPSW] = S_REG[PSW];
 
-	 SetPC(0xFFFFFE00 | (iNum << 4));
+	 V810_SetPC(0xFFFFFE00 | (iNum << 4));
 
 	 RB_ADDBT(old_PC, RB_GETPC(), 0xFE00 | (iNum << 4));
     
@@ -1009,7 +1003,7 @@
 	BEGIN_OP(INVALID);
 	    RB_DECPCBY2();
 	    ADDCLOCK(1);
-	    Exception(INVALID_OP_HANDLER_ADDR, ECODE_INVALID_OP);
+	    V810_Exception(INVALID_OP_HANDLER_ADDR, ECODE_INVALID_OP);
 	    CHECK_HALTED();
 	END_OP();
 

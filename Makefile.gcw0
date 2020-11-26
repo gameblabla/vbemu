@@ -9,7 +9,7 @@ PORT = gcw0
 # Possible values : alsa, oss, portaudio
 SOUND_ENGINE = sdl
 
-PROFILE = APPLY
+PROFILE = 0
 HUGE_PAGES = 1
 
 #### End of Configuration
@@ -24,7 +24,7 @@ DEFINES		= -DLSB_FIRST -DINLINE="inline" -DINLINE="inline" -DNDEBUG -DWANT_STERE
 DEFINES		+= -DMEDNAFEN_VERSION_NUMERIC=931
 DEFINES		+= -DWANT_16BPP -DFRONTEND_SUPPORTS_RGB565 -DFRAMESKIP -DENABLE_JOYSTICKCODE
 
-CFLAGS		= -Ofast -fdata-sections -ffunction-sections -fsection-anchors -fno-builtin -mframe-header-opt -mno-fp-exceptions -mno-check-zero-division -fsingle-precision-constant -fno-common -march=mips32r2 -mtune=mips32r2 -flto -fno-PIC -mno-shared
+CFLAGS		= -Ofast -fdata-sections -ffunction-sections -fsection-anchors -fno-builtin -mplt -mframe-header-opt -mno-fp-exceptions -mno-check-zero-division -fsingle-precision-constant -fno-common -march=mips32r2 -mtune=mips32r2 -flto -fno-PIC -mno-shared
 CFLAGS		+= $(INCLUDES) $(DEFINES)
 
 ifeq ($(PROFILE), YES)
@@ -34,7 +34,7 @@ CFLAGS		+= -fprofile-use -fbranch-probabilities
 endif
 
 CXXFLAGS	= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
-LDFLAGS     = -lc -lgcc -lstdc++ -lm -lSDL -lz -Wl,-O1,--sort-common,--as-needed,--gc-sections -flto -no-pie -s
+LDFLAGS     = -nodefaultlibs -lc -lgcc -lm -lSDL -lz -Wl,-O1,--sort-common,--as-needed,--gc-sections -flto -no-pie -s
 
 
 ifeq ($(SOUND_ENGINE), alsa)
