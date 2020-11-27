@@ -406,8 +406,8 @@ static void CheckIRQ(void)
 
 bool VIP_Init(void)
 {
-   InstantDisplayHack = false;
-   AllowDrawSkip = false;
+   InstantDisplayHack = true;
+   AllowDrawSkip = true;
    ParallaxDisabled = false;
    Anaglyph_Colors[0] = 0xFF0000;
    Anaglyph_Colors[1] = 0x0000FF;
@@ -908,48 +908,20 @@ static bool skip;
 
 void VIP_StartFrame(EmulateSpecStruct *espec)
 {
-   if(espec->VideoFormatChanged || VidSettingsDirty)
-   {
-      MakeColorLUT();
-      Recalc3DModeStuff(espec->surface->format.colorspace != MDFN_COLORSPACE_RGB);
-   }
-
    espec->DisplayRect.x = 0;
    espec->DisplayRect.y = 0;
 
-   switch(VB3DMode)
-   {
-      default:
-         espec->DisplayRect.w = 384;
-         espec->DisplayRect.h = 224;
-         break;
-
-      case VB3DMODE_VLI:
-         espec->DisplayRect.w = 768 * VBPrescale;
-         espec->DisplayRect.h = 224;
-         break;
-
-      case VB3DMODE_HLI:
-         espec->DisplayRect.w = 384;
-         espec->DisplayRect.h = 448 * VBPrescale;
-         break;
-
-      case VB3DMODE_CSCOPE:
-         espec->DisplayRect.w = 512;
-         espec->DisplayRect.h = 384;
-         break;
-
-      case VB3DMODE_SIDEBYSIDE:
-         espec->DisplayRect.w = 768 + VBSBS_Separation;
-         espec->DisplayRect.h = 224;
-         break;
-   }
+   espec->DisplayRect.w = 384;
+   espec->DisplayRect.h = 224;
 
    surface = espec->surface;
    skip = espec->skip;
    
    if(VidSettingsDirty)
    {
+      MakeColorLUT();
+      Recalc3DModeStuff(espec->surface->format.colorspace != MDFN_COLORSPACE_RGB); 
+	   
 	  memset(surface->pixels, 0, (384 * 224)*sizeof(WIDTH_TYPE));
 
       VidSettingsDirty = false;
@@ -970,31 +942,28 @@ static int32 CalcNextEvent(void)
 
 #include "vip_draw.inc"
 
-static INLINE void CopyFBColumnToTarget_Anaglyph_BASE(const bool DisplayActive_arg, const int lr)
+static INLINE void CopyFBColumnToTarget_Anaglyph_BASE(void)
 {
-   int y, y_sub;
-   const int fb = DisplayFB;
-   WIDTH_TYPE *target = surface->pixels   + Column;
-   const int32 pitchinpix = surface->pitchinpix;
-   const uint8 *fb_source = &FB[fb][lr][64 * Column];
+	int y, y_sub;
+	const int fb = DisplayFB;
+	WIDTH_TYPE *target = surface->pixels   + Column;
+	const int32 pitchinpix = surface->pitchinpix;
+	const uint8 *fb_source = &FB[fb][0][64 * Column];
 
-   if (DisplayActive_arg)
-   {
-      for(y = 56; y; y--)
-      {
+	for(y = 56; y; y--)
+	{
 		WIDTH_TYPE source_bits = *fb_source;
 
 		for(y_sub = 4; y_sub; y_sub--)
 		{
-			WIDTH_TYPE pixel  = BrightCLUT[lr][source_bits & 3];
+			WIDTH_TYPE pixel  = BrightCLUT[0][source_bits & 3];
 			*target       = pixel;
 
 			source_bits >>= 2;
 			target       += pitchinpix;
 		}
 		fb_source++;
-	  }
-   }
+	}
 }
 
 static void CopyFBColumnToTarget_Anaglyph(void)
@@ -1003,7 +972,7 @@ static void CopyFBColumnToTarget_Anaglyph(void)
 
    if(!lr)
    {
-      CopyFBColumnToTarget_Anaglyph_BASE(DisplayActive, 0);
+      CopyFBColumnToTarget_Anaglyph_BASE();
    }
    else
    {
