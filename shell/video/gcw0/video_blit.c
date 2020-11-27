@@ -135,6 +135,7 @@ void Video_Close()
 
 void Update_Video_Menu()
 {
+	SDL_SoftStretch(backbuffer, NULL, sdl_screen, NULL);
 	SDL_Flip(sdl_screen);
 }
 

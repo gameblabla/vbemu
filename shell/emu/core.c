@@ -10,7 +10,6 @@
 #include "mednafen/git.h"
 #include "mednafen/state_helpers.h"
 #include "mednafen/masmem.h"
-#include "mednafen/settings.h"
 
 #include "shared.h"
 #include "video_blit.h"
@@ -22,8 +21,6 @@
 void MDFN_LoadGameCheats(void *override);
 void MDFN_FlushGameCheats(int nosave);
 
-static bool overscan;
-static double last_sound_rate;
 static struct MDFN_Surface surf;
 
 char GameName_emu[512];
@@ -60,35 +57,11 @@ uint8_t exit_vb = 0;
 
 #include "games_database_patch.h"
 
-enum
-{
- ANAGLYPH_PRESET_DISABLED = 0,
- ANAGLYPH_PRESET_RED_BLUE,
- ANAGLYPH_PRESET_RED_CYAN,
- ANAGLYPH_PRESET_RED_ELECTRICCYAN,
- ANAGLYPH_PRESET_RED_GREEN,
- ANAGLYPH_PRESET_GREEN_MAGENTA,
- ANAGLYPH_PRESET_YELLOW_BLUE,
-};
-
-static const uint32 AnaglyphPreset_Colors[][2] =
-{
- { 0, 0 },
- { 0xFF0000, 0x0000FF },
- { 0xFF0000, 0x00B7EB },
- { 0xFF0000, 0x00FFFF },
- { 0xFF0000, 0x00FF00 },
- { 0x00FF00, 0xFF00FF },
- { 0xFFFF00, 0x0000FF },
-};
-
 #define STICK_DEADZONE 0x4000
 #define RIGHT_DPAD_LEFT 0x1000
 #define RIGHT_DPAD_RIGHT 0x0020
 #define RIGHT_DPAD_UP 0x0010
 #define RIGHT_DPAD_DOWN 0x2000
-
-static uint32 VB3DMode;
 
 static Blip_Buffer sbuf[2];
 
@@ -459,45 +432,6 @@ static void VB_Power(void)
 	ForceEventUpdates(0);  //V810_v810_timestamp);
 }
 
-static void SettingChanged(const char *name)
-{
-   if(!strcmp(name, "vb.3dmode"))
-   {
-      VB3DMode = MDFN_GetSettingUI("vb.3dmode");
-      uint32 prescale = MDFN_GetSettingUI("vb.liprescale");
-      uint32 sbs_separation = MDFN_GetSettingUI("vb.sidebyside.separation");
-
-      VIP_Set3DMode(VB3DMode, MDFN_GetSettingUI("vb.3dreverse"), prescale, sbs_separation);
-   }
-   else if(!strcmp(name, "vb.disable_parallax"))
-   {
-      VIP_SetParallaxDisable(MDFN_GetSettingB("vb.disable_parallax"));
-   }
-   else if(!strcmp(name, "vb.anaglyph.lcolor") || !strcmp(name, "vb.anaglyph.rcolor") ||
-         !strcmp(name, "vb.anaglyph.preset") || !strcmp(name, "vb.default_color"))
-   {
-      uint32 lcolor = MDFN_GetSettingUI("vb.anaglyph.lcolor"), rcolor = MDFN_GetSettingUI("vb.anaglyph.rcolor");
-      int preset = MDFN_GetSettingI("vb.anaglyph.preset");
-
-      if(preset != ANAGLYPH_PRESET_DISABLED)
-      {
-         lcolor = AnaglyphPreset_Colors[preset][0];
-         rcolor = AnaglyphPreset_Colors[preset][1];
-      }
-      VIP_SetAnaglyphColors(lcolor, rcolor);
-      VIP_SetDefaultColor(MDFN_GetSettingUI("vb.default_color"));
-   }
-   else if(!strcmp(name, "vb.input.instant_read_hack"))
-   {
-      VBINPUT_SetInstantReadHack(MDFN_GetSettingB("vb.input.instant_read_hack"));
-   }
-   else if(!strcmp(name, "vb.instant_display_hack"))
-      VIP_SetInstantDisplayHack(MDFN_GetSettingB("vb.instant_display_hack"));
-   else if(!strcmp(name, "vb.allow_draw_skip"))
-      VIP_SetAllowDrawSkip(MDFN_GetSettingB("vb.allow_draw_skip"));
-}
-
-
 // Source: http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
 // Rounds up to the nearest power of 2.
 static INLINE uint32 round_up_pow2(uint32 v)
@@ -539,21 +473,9 @@ void push_back_vector_##type(vector_##type * vector, type value) \
   if (vector->size == vector->alloc_size) { \
     vector->alloc_size = (vector->alloc_size == 0) ? 16 : vector->alloc_size * 2; \
     vector->data = realloc(vector->data, vector->alloc_size * sizeof(type)); \
-     \
-    if (vector->data == NULL) { \
-      /* do what you want */ \
-    } \
   } \
   vector->data[vector->size++] = value; \
 } \
-\
-type at_vector_##type(vector_##type * vector, size_t index) \
-{ \
-  if (index >= vector->size) { \
-    /* do what you want */ \
-  } \
-  return vector->data[index]; \
-}
 
 DEF_VECTOR(uint32)
 
@@ -641,24 +563,7 @@ static int Load(const uint8_t *data, size_t size)
    VSU_Init(&sbuf[0], &sbuf[1]);
    VBINPUT_Init();
 
-   VB3DMode = MDFN_GetSettingUI("vb.3dmode");
-   uint32 prescale = MDFN_GetSettingUI("vb.liprescale");
-   uint32 sbs_separation = MDFN_GetSettingUI("vb.sidebyside.separation");
-
-   VIP_Set3DMode(VB3DMode, MDFN_GetSettingUI("vb.3dreverse"), prescale, sbs_separation);
-
-
-   SettingChanged("vb.3dmode");
-   SettingChanged("vb.disable_parallax");
-   SettingChanged("vb.anaglyph.lcolor");
-   SettingChanged("vb.anaglyph.rcolor");
-   SettingChanged("vb.anaglyph.preset");
-   SettingChanged("vb.default_color");
-
-   SettingChanged("vb.instant_display_hack");
-   SettingChanged("vb.allow_draw_skip");
-
-   SettingChanged("vb.input.instant_read_hack");
+   VIP_Set3DMode(0, 0, 1, 0);
 
    MDFNGameInfo->fps = (int64)20000000 * 65536 * 256 / (259 * 384 * 4);
 
@@ -670,38 +575,6 @@ static int Load(const uint8_t *data, size_t size)
    MDFNGameInfo->fb_width = 384;
    MDFNGameInfo->fb_height = 224;
 
-   switch(VB3DMode)
-   {
-      default: break;
-
-      case VB3DMODE_VLI:
-               MDFNGameInfo->nominal_width = 768 * prescale;
-               MDFNGameInfo->nominal_height = 224;
-               MDFNGameInfo->fb_width = 768 * prescale;
-               MDFNGameInfo->fb_height = 224;
-               break;
-
-      case VB3DMODE_HLI:
-               MDFNGameInfo->nominal_width = 384;
-               MDFNGameInfo->nominal_height = 448 * prescale;
-               MDFNGameInfo->fb_width = 384;
-               MDFNGameInfo->fb_height = 448 * prescale;
-               break;
-
-      case VB3DMODE_CSCOPE:
-               MDFNGameInfo->nominal_width = 512;
-               MDFNGameInfo->nominal_height = 384;
-               MDFNGameInfo->fb_width = 512;
-               MDFNGameInfo->fb_height = 384;
-               break;
-
-      case VB3DMODE_SIDEBYSIDE:
-               MDFNGameInfo->nominal_width = 384 * 2 + sbs_separation;
-               MDFNGameInfo->nominal_height = 224;
-               MDFNGameInfo->fb_width = 384 * 2 + sbs_separation;
-               MDFNGameInfo->fb_height = 224;
-               break;
-   }
    MDFNGameInfo->lcm_width = MDFNGameInfo->fb_width;
    MDFNGameInfo->lcm_height = MDFNGameInfo->fb_height;
 
@@ -737,16 +610,6 @@ static void Emulate(EmulateSpecStruct *espec, int16_t *sound_buf)
 	v810_timestamp_t v810_timestamp;
 
 	VBINPUT_Frame();
-
-	if(espec->SoundFormatChanged)
-	{
-		for(int y = 0; y < 2; y++)
-		{
-			Blip_Buffer_set_sample_rate(&sbuf[y], espec->SoundRate ? espec->SoundRate : 44100, 50);
-			Blip_Buffer_set_clock_rate(&sbuf[y], (long)(VB_MASTER_CLOCK / 4));
-			Blip_Buffer_bass_freq(&sbuf[y], 20);
-		}
-	}
 
 	VIP_StartFrame(espec);
 
@@ -875,15 +738,15 @@ void Reset_VB(void)
 
 static void check_variables(void)
 {
-	setting_vb_3dmode = VB3DMODE_ANAGLYPH;
-	setting_vb_anaglyph_preset = 0;
+	for(uint_fast8_t y = 0; y < 2; y++)
+	{
+		Blip_Buffer_set_sample_rate(&sbuf[y], SOUND_OUTPUT_FREQUENCY, 50);
+		Blip_Buffer_set_clock_rate(&sbuf[y], (long)(VB_MASTER_CLOCK / 4));
+		Blip_Buffer_bass_freq(&sbuf[y], 20);
+	}
 	
-	/* Red and black */
-	setting_vb_lcolor = 0xAA0000;
-	setting_vb_rcolor = 0x000000;
-	setting_vb_right_analog_to_digital = true;
-	setting_vb_right_invert_x = false;
-	setting_vb_right_invert_y = false;
+	VIP_SetAnaglyphColors(0xAA0000, 0x000000);
+	VIP_SetDefaultColor(0xFFFFFF);
 }
 
 #define MAX_PLAYERS 1
@@ -907,9 +770,6 @@ bool Load_Game_Memory(char* game_name)
 	size_t length;
 	FILE* fp;
 
-	overscan = false;
-	check_variables();
-
 	fp = fopen(game_name, "rb");
 	if (!fp) return 0;
 	fseek (fp, 0, SEEK_END);   // non-portable
@@ -918,8 +778,6 @@ bool Load_Game_Memory(char* game_name)
 	fseek (fp, 0, SEEK_SET);
 	fread (rom_data, sizeof(uint8_t), length, fp);
 	fclose (fp);
-	
-	printf("Rom size %lu\n", length);
 
 	if (!MDFNI_LoadGame(rom_data,length))
 		return false;
@@ -1011,22 +869,15 @@ void Emulation_Run(void)
 #else
 	spec.skip = 0;
 #endif
-	if (spec.SoundRate != last_sound_rate)
-	{
-		spec.SoundFormatChanged = true;
-		last_sound_rate = spec.SoundRate;
-	}
-
 	input_buf[0] = Read_Input();
 	Emulate(&spec, sound_buf);
 
-	int16 *const SoundBuf = sound_buf + spec.SoundBufSizeALMS * EmulatedVB.soundchan;
+	//int16 *const SoundBuf = sound_buf + spec.SoundBufSizeALMS * EmulatedVB.soundchan;
 	int32 SoundBufSize = spec.SoundBufSize - spec.SoundBufSizeALMS;
 	//const int32 SoundBufMaxSize = spec.SoundBufMaxSize - spec.SoundBufSizeALMS;
 	spec.SoundBufSize = spec.SoundBufSizeALMS + SoundBufSize;
    
 #ifdef FRAMESKIP
-	
 	newTick = Timer_Read();
 	if ( (newTick) - (lastTick) > 1000000) 
 	{
@@ -1154,14 +1005,6 @@ size_t retro_get_memory_size(unsigned type)
    }
 
    return 0;
-}
-
-void MDFND_DispMessage(unsigned char *str)
-{
-}
-
-void MDFND_PrintError(const char* err)
-{
 }
 
 void SaveState(char* path, uint_fast8_t state)
