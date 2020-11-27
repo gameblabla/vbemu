@@ -447,140 +447,104 @@ static INLINE uint32 round_up_pow2(uint32 v)
 	return(v);
 }
 
-#define DEF_VECTOR(type) \
-typedef struct vector_##type { \
-  type * data; \
-  size_t alloc_size; \
-  size_t size; \
-} vector_##type; \
-\
-void init_vector_##type(vector_##type * vector) \
-{ \
-  vector->data = NULL; \
-  vector->alloc_size = vector->size = 0; \
-} \
-\
-void clear_vector_##type(vector_##type * vector) \
-{ \
-  if (vector->data != NULL) {\
-    free(vector->data); \
-    init_vector_##type(vector);  \
-  } \
-} \
-\
-void push_back_vector_##type(vector_##type * vector, type value) \
-{ \
-  if (vector->size == vector->alloc_size) { \
-    vector->alloc_size = (vector->alloc_size == 0) ? 16 : vector->alloc_size * 2; \
-    vector->data = realloc(vector->data, vector->alloc_size * sizeof(type)); \
-  } \
-  vector->data[vector->size++] = value; \
-} \
-
-DEF_VECTOR(uint32)
-
 static int Load(const uint8_t *data, size_t size)
 {
-   /* VB ROM image size is not a power of 2??? */
-   if(size != round_up_pow2(size))
-      return(0);
+	uint32_t* Map_Addresses;
+	uint32_t map_size = 0;
+	
+	/* VB ROM image size is not a power of 2??? */
+	if(size != round_up_pow2(size))
+		return(0);
 
-   /* VB ROM image size is too small?? */
-   if(size < 256)
-      return(0);
+	/* VB ROM image size is too small?? */
+	if(size < 256)
+		return(0);
 
-   /* VB ROM image size is too large?? */
-   if(size > (1 << 24))
-      return(0);
+	/* VB ROM image size is too large?? */
+	if(size > (1 << 24))
+		return(0);
 
-   #ifdef DEBUG
-   printf("ROM:       %dKiB\n", (int)(size / 1024));
-   #endif
+	#ifdef DEBUG
+	printf("ROM:       %dKiB\n", (int)(size / 1024));
+	#endif
 
-   V810_Init();
+	V810_Init();
 
-   /*V810_SetMemReadHandlers(MemRead8, MemRead16, NULL);
-   V810_SetMemWriteHandlers(MemWrite8, MemWrite16, NULL);*/
-   V810_SetIOReadHandlers(MemRead8, MemRead16, NULL);
-   V810_SetIOWriteHandlers(MemWrite8, MemWrite16, NULL);
+	/*V810_SetMemReadHandlers(MemRead8, MemRead16, NULL);
+	V810_SetMemWriteHandlers(MemWrite8, MemWrite16, NULL);*/
+	V810_SetIOReadHandlers(MemRead8, MemRead16, NULL);
+	V810_SetIOWriteHandlers(MemWrite8, MemWrite16, NULL);
 
-   for(int i = 0; i < 256; i++)
-   {
-      V810_SetMemReadBus32(i, false);
-      V810_SetMemWriteBus32(i, false);
-   }
+	for(int i = 0; i < 256; i++)
+	{
+		V810_SetMemReadBus32(i, false);
+		V810_SetMemWriteBus32(i, false);
+	}
 
-   vector_uint32 Map_Addresses;
-   init_vector_uint32(&Map_Addresses);
+	Map_Addresses = malloc(8192 * 4);
+   
+	for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
+	{
+		for(uint64 sub_A = 5 << 24; sub_A < (6 << 24); sub_A += 65536)
+		{
+			Map_Addresses[map_size++] = A + sub_A;
+		}
+	}
+	WRAM = V810_SetFastMap(Map_Addresses, 65536, map_size, "WRAM");
 
-   for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
-   {
-      for(uint64 sub_A = 5 << 24; sub_A < (6 << 24); sub_A += 65536)
-      {
-         push_back_vector_uint32(&Map_Addresses, A + sub_A);
-      }
-   }
+	// Round up the ROM size to 65536(we mirror it a little later)
+	GPROM_Mask = (size < 65536) ? (65536 - 1) : (size - 1);
 
-   WRAM = V810_SetFastMap(&Map_Addresses.data[0], 65536, Map_Addresses.size, "WRAM");
-   clear_vector_uint32(&Map_Addresses);
+	map_size = 0;
+	for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
+	{
+		for(uint64 sub_A = 7 << 24; sub_A < (8 << 24); sub_A += GPROM_Mask + 1)
+		{
+			Map_Addresses[map_size++] = A + sub_A;
+		}
+	}
 
-   // Round up the ROM size to 65536(we mirror it a little later)
-   GPROM_Mask = (size < 65536) ? (65536 - 1) : (size - 1);
+	GPROM = V810_SetFastMap(Map_Addresses, GPROM_Mask + 1, map_size, "Cart ROM");
+	map_size = 0;
 
-   for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
-   {
-      for(uint64 sub_A = 7 << 24; sub_A < (8 << 24); sub_A += GPROM_Mask + 1)
-      {
-         push_back_vector_uint32(&Map_Addresses, A + sub_A);
-         //printf("%08x\n", (uint32)(A + sub_A));
-      }
-   }
+	// Mirror ROM images < 64KiB to 64KiB
+	for(uint64 i = 0; i < 65536; i += size)
+		memcpy(GPROM + i, data, size);
 
+	GPRAM_Mask = 0xFFFF;
 
-   GPROM = V810_SetFastMap(&Map_Addresses.data[0], GPROM_Mask + 1, Map_Addresses.size, "Cart ROM");
-   clear_vector_uint32(&Map_Addresses);
+	for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
+	{
+		for(uint64 sub_A = 6 << 24; sub_A < (7 << 24); sub_A += GPRAM_Mask + 1)
+		{
+			Map_Addresses[map_size++] = A + sub_A;
+		}
+	}
+	GPRAM = V810_SetFastMap(Map_Addresses, GPRAM_Mask + 1, map_size, "Cart RAM");
+   
+	if (Map_Addresses)
+	{
+		free(Map_Addresses);
+		Map_Addresses = NULL;
+	}
 
-   // Mirror ROM images < 64KiB to 64KiB
-   for(uint64 i = 0; i < 65536; i += size)
-      memcpy(GPROM + i, data, size);
+	memset(GPRAM, 0, GPRAM_Mask + 1);
+	VIP_Init();
+	VSU_Init(&sbuf[0], &sbuf[1]);
+	VBINPUT_Init();
+	VIP_Set3DMode(1, 0);
+	MDFNGameInfo->fps = (int64)20000000 * 65536 * 256 / (259 * 384 * 4);
+	VB_Power();
 
-   GPRAM_Mask = 0xFFFF;
+	MDFNGameInfo->nominal_width = 384;
+	MDFNGameInfo->nominal_height = 224;
+	MDFNGameInfo->fb_width = 384;
+	MDFNGameInfo->fb_height = 224;
 
-   for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
-   {
-      for(uint64 sub_A = 6 << 24; sub_A < (7 << 24); sub_A += GPRAM_Mask + 1)
-      {
-         //printf("GPRAM: %08x\n", A + sub_A);
-         push_back_vector_uint32(&Map_Addresses, A + sub_A);
-      }
-   }
+	MDFNGameInfo->lcm_width = MDFNGameInfo->fb_width;
+	MDFNGameInfo->lcm_height = MDFNGameInfo->fb_height;
 
-
-   GPRAM = V810_SetFastMap(&Map_Addresses.data[0], GPRAM_Mask + 1, Map_Addresses.size, "Cart RAM");
-   clear_vector_uint32(&Map_Addresses);
-
-   memset(GPRAM, 0, GPRAM_Mask + 1);
-
-   VIP_Init();
-   VSU_Init(&sbuf[0], &sbuf[1]);
-   VBINPUT_Init();
-
-   VIP_Set3DMode(1, 0);
-
-   MDFNGameInfo->fps = (int64)20000000 * 65536 * 256 / (259 * 384 * 4);
-
-
-   VB_Power();
-
-   MDFNGameInfo->nominal_width = 384;
-   MDFNGameInfo->nominal_height = 224;
-   MDFNGameInfo->fb_width = 384;
-   MDFNGameInfo->fb_height = 224;
-
-   MDFNGameInfo->lcm_width = MDFNGameInfo->fb_width;
-   MDFNGameInfo->lcm_height = MDFNGameInfo->fb_height;
-
-   return(1);
+	return(1);
 }
 
 static void CloseGame(void)
