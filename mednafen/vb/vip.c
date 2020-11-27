@@ -26,7 +26,7 @@
 #include "../masmem.h"
 #include "../state_helpers.h"
 
-static uint8 FB[2][2][0x6000];
+static uint8 FB[2][0x6000];
 static uint16 CHR_RAM[0x8000 / sizeof(uint16)];
 static uint16 DRAM[0x20000 / sizeof(uint16)];
 
@@ -88,8 +88,6 @@ static void CopyFBColumnToTarget_SideBySide(void) NO_INLINE;
 static void CopyFBColumnToTarget_VLI(void) NO_INLINE;
 static void CopyFBColumnToTarget_HLI(void) NO_INLINE;*/
 static void (*CopyFBColumnToTarget)(void) = NULL;
-static uint32 VB3DMode;
-static uint32 VB3DReverse;
 static uint32 VBPrescale;
 static uint32 VBSBS_Separation;
 static uint32 HLILUT[256];
@@ -97,8 +95,7 @@ static uint32 ColorLUT[2][256];
 static int32 BrightnessCache[4];
 static uint32 BrightCLUT[2][4];
 
-static double ColorLUTNoGC[2][256][3];
-static uint32 AnaSlowColorLUT[256][256];
+static float ColorLUTNoGC[2][256][3];
 
 // A few settings:
 static bool InstantDisplayHack;
@@ -106,69 +103,34 @@ static bool AllowDrawSkip;
 
 static bool VidSettingsDirty;
 static bool ParallaxDisabled;
-static uint32 Anaglyph_Colors[2];
 static uint32 Default_Color;
 
 static void MakeColorLUT(void)
 {
-   unsigned lr, i, l_b, r_b;
+   unsigned lr, i;
 
    for(lr = 0; lr < 2; lr++)
    {
       for(i = 0; i < 256; i++)
       {
-         double prod    = (double)i / 255;
-         double r       = prod; 
-         double g       = prod; 
-         double b       = prod;
+         float prod    = (float)i / 255;
+         float r       = prod; 
+         float g       = prod; 
+         float b       = prod;
          /* TODO: Use correct gamma curve, instead of approximation. */
-         double r_prime = pow(r, 1.0 / 2.2);
-         double g_prime = pow(g, 1.0 / 2.2);
-         double b_prime = pow(b, 1.0 / 2.2);
+         float r_prime = pow(r, 1.0 / 2.2);
+         float g_prime = pow(g, 1.0 / 2.2);
+         float b_prime = pow(b, 1.0 / 2.2);
 
-         switch(VB3DMode)
-         {
-            case VB3DMODE_ANAGLYPH:
-               r_prime = r_prime * ((Anaglyph_Colors[lr ^ VB3DReverse] >> 16) & 0xFF) / 255;
-               g_prime = g_prime * ((Anaglyph_Colors[lr ^ VB3DReverse] >> 8) & 0xFF) / 255;
-               b_prime = b_prime * ((Anaglyph_Colors[lr ^ VB3DReverse] >> 0) & 0xFF) / 255;
-               break;
-            default:
-               r_prime = r_prime * ((Default_Color >> 16) & 0xFF) / 255;
-               g_prime = g_prime * ((Default_Color >> 8) & 0xFF) / 255;
-               b_prime = b_prime * ((Default_Color >> 0) & 0xFF) / 255;
-               break;
-         }
+         r_prime = r_prime * ((Default_Color >> 16) & 0xFF) / 255;
+		 g_prime = g_prime * ((Default_Color >> 8) & 0xFF) / 255;
+		 b_prime = b_prime * ((Default_Color >> 0) & 0xFF) / 255;
+		 
          ColorLUTNoGC[lr][i][0] = pow(r_prime, 2.2 / 1.0);
          ColorLUTNoGC[lr][i][1] = pow(g_prime, 2.2 / 1.0);
          ColorLUTNoGC[lr][i][2] = pow(b_prime, 2.2 / 1.0);
 
          ColorLUT[lr][i] = MAKECOLOR((int)(r_prime * 255), (int)(g_prime * 255), (int)(b_prime * 255));
-      }
-   }
-
-   // Anaglyph slow-mode LUT calculation
-   for(l_b = 0; l_b < 256; l_b++)
-   {
-      for(r_b = 0; r_b < 256; r_b++)
-      {
-         double r_prime, g_prime, b_prime;
-         double r = ColorLUTNoGC[0][l_b][0] + ColorLUTNoGC[1][r_b][0];
-         double g = ColorLUTNoGC[0][l_b][1] + ColorLUTNoGC[1][r_b][1];
-         double b = ColorLUTNoGC[0][l_b][2] + ColorLUTNoGC[1][r_b][2];
-
-         if(r > 1.0)
-            r = 1.0;
-         if(g > 1.0)
-            g = 1.0;
-         if(b > 1.0)
-            b = 1.0;
-
-         r_prime = pow(r, 1.0 / 2.2);
-         g_prime = pow(g, 1.0 / 2.2);
-         b_prime = pow(b, 1.0 / 2.2);
-
-         AnaSlowColorLUT[l_b][r_b] = MAKECOLOR(((int)(r_prime * 255)), ((int)(g_prime * 255)), ((int)(b_prime * 255)));
       }
    }
 }
@@ -238,42 +200,14 @@ static void RecalcBrightnessCache(void)
 
 static void Recalc3DModeStuff(bool non_rgb_output)
 {
-   switch(VB3DMode)
-   {
-      default: 
-         CopyFBColumnToTarget = CopyFBColumnToTarget_Anaglyph;
-         /*if(((Anaglyph_Colors[0] & 0xFF) && (Anaglyph_Colors[1] & 0xFF)) ||
-               ((Anaglyph_Colors[0] & 0xFF00) && (Anaglyph_Colors[1] & 0xFF00)) ||
-               ((Anaglyph_Colors[0] & 0xFF0000) && (Anaglyph_Colors[1] & 0xFF0000)) ||
-               non_rgb_output)
-            CopyFBColumnToTarget = CopyFBColumnToTarget_AnaglyphSlow;*/
-         break;
-
-      /*case VB3DMODE_CSCOPE:
-         CopyFBColumnToTarget = CopyFBColumnToTarget_CScope;
-         break;
-
-      case VB3DMODE_SIDEBYSIDE:
-         CopyFBColumnToTarget = CopyFBColumnToTarget_SideBySide;
-         break;
-
-      case VB3DMODE_VLI:
-         CopyFBColumnToTarget = CopyFBColumnToTarget_VLI;
-         break;
-
-      case VB3DMODE_HLI:
-         CopyFBColumnToTarget = CopyFBColumnToTarget_HLI;
-         break;*/
-   }
+   CopyFBColumnToTarget = CopyFBColumnToTarget_Anaglyph;
    RecalcBrightnessCache();
 }
 
-void VIP_Set3DMode(uint32 mode, bool reverse, uint32 prescale, uint32 sbs_separation)
+void VIP_Set3DMode(uint32 prescale, uint32 sbs_separation)
 {
    uint32_t p;
 
-   VB3DMode         = mode;
-   VB3DReverse      = reverse ? 1 : 0;
    VBPrescale       = prescale;
    VBSBS_Separation = sbs_separation;
 
@@ -311,15 +245,6 @@ void VIP_SetParallaxDisable(bool disabled)
 void VIP_SetDefaultColor(uint32 default_color)
 {
    Default_Color = default_color;
-
-   VidSettingsDirty = true;
-}
-
-
-void VIP_SetAnaglyphColors(uint32 lcolor, uint32 rcolor)
-{
-   Anaglyph_Colors[0] = lcolor;
-   Anaglyph_Colors[1] = rcolor;
 
    VidSettingsDirty = true;
 }
@@ -409,11 +334,7 @@ bool VIP_Init(void)
    InstantDisplayHack = true;
    AllowDrawSkip = true;
    ParallaxDisabled = false;
-   Anaglyph_Colors[0] = 0xFF0000;
-   Anaglyph_Colors[1] = 0x0000FF;
-   VB3DMode = VB3DMODE_ANAGLYPH;
-   Default_Color = 0xFFFFFF;
-   VB3DReverse = 0;
+   Default_Color = 0xAA0000;
    VBPrescale = 1;
    VBSBS_Separation = 0;
 
@@ -727,7 +648,7 @@ uint8 VIP_Read8(int32 timestamp, uint32 A)
       case 0x1:
          if((A & 0x7FFF) >= 0x6000)
             return VIP_MA16R8(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000));
-         return FB[(A >> 15) & 1][(A >> 16) & 1][A & 0x7FFF];
+         return FB[(A >> 15) & 1][A & 0x7FFF];
       case 0x2:
       case 0x3:
          return VIP_MA16R8(DRAM, A & 0x1FFFF);
@@ -765,7 +686,7 @@ uint16 VIP_Read16(int32 timestamp, uint32 A)
       case 0x1:
          if((A & 0x7FFF) >= 0x6000)
             return VIP_MA16R16(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000));
-         return LoadU16_LE((uint16 *)&FB[(A >> 15) & 1][(A >> 16) & 1][A & 0x7FFF]);
+         return LoadU16_LE((uint16 *)&FB[(A >> 15) & 1][A & 0x7FFF]);
       case 0x2:
       case 0x3:
          return VIP_MA16R16(DRAM, A & 0x1FFFF);
@@ -806,7 +727,7 @@ void VIP_Write8(int32 timestamp, uint32 A, uint8 V)
          if((A & 0x7FFF) >= 0x6000)
             VIP_MA16W8(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000), V);
          else
-            FB[(A >> 15) & 1][(A >> 16) & 1][A & 0x7FFF] = V;
+            FB[(A >> 15) & 1][A & 0x7FFF] = V;
          break;
 
       case 0x2:
@@ -863,7 +784,7 @@ void VIP_Write16(int32 timestamp, uint32 A, uint16 V)
          if((A & 0x7FFF) >= 0x6000)
             VIP_MA16W16(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000), V);
          else
-            StoreU16_LE((uint16 *)&FB[(A >> 15) & 1][(A >> 16) & 1][A & 0x7FFF], V);
+            StoreU16_LE((uint16 *)&FB[(A >> 15) & 1][A & 0x7FFF], V);
          break;
 
       case 0x2:
@@ -948,7 +869,7 @@ static INLINE void CopyFBColumnToTarget_Anaglyph_BASE(void)
 	const int fb = DisplayFB;
 	WIDTH_TYPE *target = surface->pixels   + Column;
 	const int32 pitchinpix = surface->pitchinpix;
-	const uint8 *fb_source = &FB[fb][0][64 * Column];
+	const uint8 *fb_source = &FB[fb][64 * Column];
 
 	for(y = 56; y; y--)
 	{
@@ -974,366 +895,7 @@ static void CopyFBColumnToTarget_Anaglyph(void)
    {
       CopyFBColumnToTarget_Anaglyph_BASE();
    }
-   else
-   {
-     //CopyFBColumnToTarget_Anaglyph_BASE(DisplayActive, 1);
-   }
 }
-
-/*
-static uint32 AnaSlowBuf[384][224];
-
-static INLINE void CopyFBColumnToTarget_AnaglyphSlow_BASE(const bool DisplayActive_arg, const int lr)
-{
-   const int fb = DisplayFB;
-   const uint8 *fb_source = &FB[fb][lr][64 * Column];
-
-   if(!lr)
-   {
-      uint32 *target = AnaSlowBuf[Column];
-
-      if (DisplayActive_arg)
-      {
-         int y;
-         for(y = 56; y; y--)
-         {
-            int y_sub;
-            uint32 source_bits = *fb_source;
-
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               uint32 pixel  = BrightnessCache[source_bits & 3];
-               *target       = pixel;
-               source_bits >>= 2;
-               target++;
-            }
-            fb_source++;
-         }
-      }
-      else
-      {
-         int y;
-         for(y = 56; y; y--)
-         {
-            int y_sub;
-            uint32 source_bits = *fb_source;
-
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               *target       = 0;
-               source_bits >>= 2;
-               target++;
-            }
-            fb_source++;
-         }
-      }
-   }
-   else
-   {
-      int y;
-      uint32         *target = surface->pixels + Column;
-      const uint32 *left_src = AnaSlowBuf[Column];
-      const int32    pitch32 = surface->pitch32;
-
-      for(y = 56; y; y--)
-      {
-         int y_sub;
-         uint32 source_bits = *fb_source;
-
-         for(y_sub = 4; y_sub; y_sub--)
-         {
-            uint32 pixel  = AnaSlowColorLUT
-               [*left_src]
-               [DisplayActive_arg ? BrightnessCache[source_bits & 3] : 0];
-
-            *target       = pixel;
-
-            source_bits >>= 2;
-            target       += pitch32;
-            left_src++;
-         }
-         fb_source++;
-      }
-   }
-}
-
-static void CopyFBColumnToTarget_AnaglyphSlow(void)
-{
-   const int lr = (DisplayRegion & 2) >> 1;
-
-   if(!lr)
-      CopyFBColumnToTarget_AnaglyphSlow_BASE(DisplayActive, 0);
-   else
-      CopyFBColumnToTarget_AnaglyphSlow_BASE(DisplayActive, 1);
-}
-
-static void CopyFBColumnToTarget_CScope_BASE(const bool DisplayActive_arg, const int lr, const int dest_lr)
-{
-   int y, y_sub;
-   const int fb = DisplayFB;
-   const uint8 *fb_source = &FB[fb][lr][64 * Column];
-
-   if(dest_lr)
-   {
-      uint32 *target = surface->pixels + (512 - 16 - 1) + (Column) 
-         * surface->pitch32;
-      if(DisplayActive_arg)
-      {
-         for(y = 56; y; y--)
-         {
-            uint32 source_bits = *fb_source;
-
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               *target       = BrightCLUT[lr][source_bits & 3];
-               source_bits >>= 2;
-               target--;
-            }
-            fb_source++;
-         }
-      }
-      else
-      {
-         for(y = 56; y; y--)
-         {
-            uint32 source_bits = *fb_source;
-
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               *target       = 0;
-               source_bits >>= 2;
-               target--;
-            }
-            fb_source++;
-         }
-      }
-   }
-   else
-   {
-      uint32 *target = surface->pixels + 16 + (383 - Column) * surface->pitch32;
-      if(DisplayActive_arg)
-      {
-         for(y = 56; y; y--)
-         {
-            uint32 source_bits = *fb_source;
-
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               *target       = BrightCLUT[lr][source_bits & 3];
-               source_bits >>= 2;
-               target++;
-            }
-            fb_source++;
-         }
-      }
-      else
-      {
-         for(y = 56; y; y--)
-         {
-            uint32 source_bits = *fb_source;
-
-            for(y_sub = 4; y_sub; y_sub--)
-            {
-               *target       = 0;
-               source_bits >>= 2;
-               target++;
-            }
-            fb_source++;
-         }
-      }
-   }
-}
-
-static void CopyFBColumnToTarget_CScope(void)
-{
-   const int lr = (DisplayRegion & 2) >> 1;
-
-   if(!lr)
-      CopyFBColumnToTarget_CScope_BASE(DisplayActive, 0, 0 ^ VB3DReverse);
-   else
-      CopyFBColumnToTarget_CScope_BASE(DisplayActive, 1, 1 ^ VB3DReverse);
-}
-
-static void CopyFBColumnToTarget_SideBySide_BASE(const bool DisplayActive_arg, const int lr, const int dest_lr)
-{
-   const int fb = DisplayFB;
-   uint32 *target = surface->pixels + Column + (dest_lr ? (384 + VBSBS_Separation) : 0);
-   const int32 pitch32 = surface->pitch32;
-   const uint8 *fb_source = &FB[fb][lr][64 * Column];
-
-   if(DisplayActive_arg)
-   {
-      int y;
-      for(y = 56; y; y--)
-      {
-         int y_sub;
-         uint32 source_bits = *fb_source;
-
-         for(y_sub = 4; y_sub; y_sub--)
-         {
-            *target       = BrightCLUT[lr][source_bits & 3];
-            source_bits >>= 2;
-            target       += pitch32;
-         }
-         fb_source++;
-      }
-   }
-   else
-   {
-      int y;
-      for(y = 56; y; y--)
-      {
-         int y_sub;
-         uint32 source_bits = *fb_source;
-
-         for(y_sub = 4; y_sub; y_sub--)
-         {
-            *target       = 0;
-            source_bits >>= 2;
-            target       += pitch32;
-         }
-         fb_source++;
-      }
-   }
-}
-
-static void CopyFBColumnToTarget_SideBySide(void)
-{
-   const int lr = (DisplayRegion & 2) >> 1;
-
-   if(!lr)
-      CopyFBColumnToTarget_SideBySide_BASE(DisplayActive, 0, 0 ^ VB3DReverse);
-   else
-      CopyFBColumnToTarget_SideBySide_BASE(DisplayActive, 1, 1 ^ VB3DReverse);
-}
-
-static INLINE void CopyFBColumnToTarget_VLI_BASE(const bool DisplayActive_arg, const int lr, const int dest_lr)
-{
-   const int fb           = DisplayFB;
-   uint32 *target         = surface->pixels + Column * 2 * VBPrescale + dest_lr;
-   const int32 pitch32    = surface->pitch32;
-   const uint8 *fb_source = &FB[fb][lr][64 * Column];
-
-   if(DisplayActive_arg)
-   {
-      int y;
-      for(y = 56; y; y--)
-      {
-         int y_sub;
-         uint32 source_bits = *fb_source;
-
-         for(y_sub = 4; y_sub; y_sub--)
-         {
-            uint32 ps;
-            uint32 tv = BrightCLUT[0][source_bits & 3];
-            for(ps = 0; ps < VBPrescale; ps++)
-               target[ps * 2] = tv;
-
-            source_bits >>= 2;
-            target += pitch32;
-         }
-         fb_source++;
-      }
-   }
-   else
-   {
-      int y;
-      for(y = 56; y; y--)
-      {
-         int y_sub;
-         uint32 source_bits = *fb_source;
-
-         for(y_sub = 4; y_sub; y_sub--)
-         {
-            uint32 ps;
-            uint32 tv = 0;
-            for(ps = 0; ps < VBPrescale; ps++)
-               target[ps * 2] = tv;
-
-            source_bits >>= 2;
-            target       += pitch32;
-         }
-         fb_source++;
-      }
-   }
-}
-
-static void CopyFBColumnToTarget_VLI(void)
-{
-   const int lr = (DisplayRegion & 2) >> 1;
-
-   if(!lr)
-      CopyFBColumnToTarget_VLI_BASE(DisplayActive, 0, 0 ^ VB3DReverse);
-   else
-      CopyFBColumnToTarget_VLI_BASE(DisplayActive, 1, 1 ^ VB3DReverse);
-}
-
-static INLINE void CopyFBColumnToTarget_HLI_BASE(const bool DisplayActive_arg, const int lr, const int dest_lr)
-{
-   const int fb = DisplayFB;
-   const int32 pitch32 = surface->pitch32;
-   uint32 *target = surface->pixels + Column + dest_lr * pitch32;
-   const uint8 *fb_source = &FB[fb][lr][64 * Column];
-
-   if(VBPrescale <= 4)
-   {
-      int y;
-      for(y = 56; y; y--)
-      {
-         int y_sub;
-         uint32 source_bits = HLILUT[*fb_source];
-
-         for(y_sub = 4 * VBPrescale; y_sub; y_sub--)
-         {
-            if(DisplayActive_arg)
-               *target = BrightCLUT[0][source_bits & 3];
-            else
-               *target = 0;
-
-            target += pitch32 * 2;
-            source_bits >>= 2;
-         }
-         fb_source++;
-      }
-   }
-   else
-   {
-      int y;
-      for(y = 56; y; y--)
-      {
-         int y_sub;
-         uint32 source_bits = *fb_source;
-
-         for(y_sub = 4; y_sub; y_sub--)
-         {
-            uint32 ps;
-            for(ps = 0; ps < VBPrescale; ps++)
-            {
-               if(DisplayActive_arg)
-                  *target = BrightCLUT[0][source_bits & 3];
-               else
-                  *target = 0;
-
-               target += pitch32 * 2;
-            }
-
-            source_bits >>= 2;
-         }
-         fb_source++;
-      }
-   }
-}
-
-static void CopyFBColumnToTarget_HLI(void)
-{
-   const int lr = (DisplayRegion & 2) >> 1;
-
-   if (!lr)
-      CopyFBColumnToTarget_HLI_BASE(DisplayActive, 0, 0 ^ VB3DReverse);
-   else
-      CopyFBColumnToTarget_HLI_BASE(DisplayActive, 1, 1 ^ VB3DReverse);
-}
-*/
 
 v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
 {
@@ -1366,7 +928,7 @@ v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
                for(lr = 0; lr < 2; lr++)
                {
                   int x;
-                  uint8 *FB_Target = FB[DrawingFB][lr] + DrawingBlock * 2;
+                  uint8 *FB_Target = FB[DrawingFB] + DrawingBlock * 2;
 
                   for(x = 0; x < 384; x++)
                   {
@@ -1519,7 +1081,7 @@ int VIP_StateAction(StateMem *sm, int load, int data_only)
 {
    SFORMAT StateRegs[] =
    {
-      SFARRAY(FB[0][0], 0x6000 * 2 * 2),
+      SFARRAY(FB[0], 0x6000 * 2),
       SFARRAY16(CHR_RAM, 0x8000 / sizeof(uint16)),
       SFARRAY16(DRAM, 0x20000 / sizeof(uint16)),
 

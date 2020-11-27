@@ -563,7 +563,7 @@ static int Load(const uint8_t *data, size_t size)
    VSU_Init(&sbuf[0], &sbuf[1]);
    VBINPUT_Init();
 
-   VIP_Set3DMode(0, 0, 1, 0);
+   VIP_Set3DMode(1, 0);
 
    MDFNGameInfo->fps = (int64)20000000 * 65536 * 256 / (259 * 384 * 4);
 
@@ -744,9 +744,7 @@ static void check_variables(void)
 		Blip_Buffer_set_clock_rate(&sbuf[y], (long)(VB_MASTER_CLOCK / 4));
 		Blip_Buffer_bass_freq(&sbuf[y], 20);
 	}
-	
-	VIP_SetAnaglyphColors(0xAA0000, 0x000000);
-	VIP_SetDefaultColor(0xFFFFFF);
+	VIP_SetDefaultColor(0xAA0000);
 }
 
 #define MAX_PLAYERS 1
@@ -769,6 +767,8 @@ bool Load_Game_Memory(char* game_name)
 	uint8_t* rom_data;
 	size_t length;
 	FILE* fp;
+	
+	check_variables();
 
 	fp = fopen(game_name, "rb");
 	if (!fp) return 0;
@@ -818,7 +818,7 @@ bool Load_Game_Memory(char* game_name)
 	surf.h                       = FB_HEIGHT;
 	surf.pitchinpix              = FB_WIDTH;
 	hookup_ports(true);
-	check_variables();
+
 	return true;
 }
 

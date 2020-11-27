@@ -107,7 +107,7 @@ blargg_err_t Blip_Buffer_set_sample_rate(Blip_Buffer* bbuf, long new_rate,
 blip_resampled_time_t Blip_Buffer_clock_rate_factor(Blip_Buffer* bbuf,
       long rate)
 {
-   double ratio = (double) bbuf->sample_rate / rate;
+   float ratio = (float) bbuf->sample_rate / rate;
    blip_s64 factor = (blip_s64) floor(ratio * (1LL << BLIP_BUFFER_ACCURACY) + 0.5);
    /*assert(factor > 0
           || !bbuf->sample_rate);*/   // fails if clock/output ratio is too large

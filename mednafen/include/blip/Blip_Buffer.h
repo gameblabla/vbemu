@@ -139,7 +139,7 @@ typedef struct
    int delta_factor;
 } Blip_Synth;
 
-static INLINE void Blip_Synth_set_volume(Blip_Synth* synth, double v, int range)
+static INLINE void Blip_Synth_set_volume(Blip_Synth* synth, float v, int range)
 {
    synth->delta_factor = ((v * (1.0 / (range < 0 ? -range : range))) *
                               (1L << blip_sample_bits) + 0.5);
