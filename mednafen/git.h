@@ -124,7 +124,7 @@ typedef struct
 	bool SoundFormatChanged;
 
 	// Sound rate.  Set by driver side.
-	double SoundRate;
+	float SoundRate;
 
 	// Maximum size of the sound buffer, in frames.  Set by the driver code.
 	int32 SoundBufMaxSize;
@@ -141,7 +141,7 @@ typedef struct
 				// if mid sync isn't implemented for the emulation module in use.
 } EmulateSpecStruct;
 
-#define MDFN_MASTERCLOCK_FIXED(n)	((int64)((double)(n) * (1LL << 32)))
+#define MDFN_MASTERCLOCK_FIXED(n)	((int64)((float)(n) * (1LL << 32)))
 
 typedef struct
 {

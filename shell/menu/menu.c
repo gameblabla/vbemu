@@ -26,7 +26,6 @@ static char home_path[256], save_path[256], sram_path[256], conf_path[256];
 extern SDL_Surface *sdl_screen;
 extern char GameName_emu[512];
 
-static uint8_t selectpressed = 0;
 static uint8_t save_slot = 0;
 static const int8_t upscalers_available = 2
 #ifdef SCALE2X_UPSCALER
@@ -51,7 +50,6 @@ static void SRAM_Menu(uint_fast8_t load_mode)
 
 static void config_load()
 {
-	uint_fast8_t i;
 	char config_path[512];
 	FILE* fp;
 	snprintf(config_path, sizeof(config_path), "%s/%s.cfg", conf_path, GameName_emu);
@@ -263,7 +261,6 @@ static void Input_Remapping()
 					{
 						SDL_FillRect( backbuffer, NULL, 0 );
 						print_string("Please press button for mapping", TextWhite, TextBlue, 37, 108, (uint16_t*)backbuffer->pixels);
-						SDL_SoftStretch(backbuffer, NULL, sdl_screen, NULL);
 
 						while (SDL_PollEvent(&Event))
 						{
@@ -276,7 +273,7 @@ static void Input_Remapping()
 								}
 							}
 						}
-						SDL_Flip(sdl_screen);
+						Update_Video_Menu();
 					}
 				break;
             }
@@ -343,8 +340,7 @@ static void Input_Remapping()
 		if (currentselection == 14) print_string(text, TextRed, 0, 165, 125+2, (uint16_t*)backbuffer->pixels);
 		else print_string(text, TextWhite, 0, 165, 125+2, (uint16_t*)backbuffer->pixels);
 
-		SDL_SoftStretch(backbuffer, NULL, sdl_screen, NULL);
-		SDL_Flip(sdl_screen);
+		Update_Video_Menu();
 	}
 
 	config_save();
@@ -361,7 +357,6 @@ void Menu()
 	char text[50];
     int16_t pressed = 0;
     int16_t currentselection = 1;
-    SDL_Rect dstRect;
     SDL_Event Event;
 
     Set_Video_Menu();
@@ -536,8 +531,7 @@ void Menu()
             }
         }
 
-		SDL_SoftStretch(backbuffer, NULL, sdl_screen, NULL);
-		SDL_Flip(sdl_screen);
+		Update_Video_Menu();
     }
 
     SDL_FillRect(sdl_screen, NULL, 0);
@@ -555,20 +549,6 @@ void Menu()
 	/* Switch back to emulator core */
 	emulator_state = 0;
 	Set_Video_InGame();
-}
-
-static void Cleanup(void)
-{
-#ifdef SCALE2X_UPSCALER
-	if (scale2x_buf) SDL_FreeSurface(scale2x_buf);
-#endif
-	if (sdl_screen) SDL_FreeSurface(sdl_screen);
-	if (backbuffer) SDL_FreeSurface(backbuffer);
-
-	// Deinitialize audio and video output
-	Audio_Close();
-
-	SDL_Quit();
 }
 
 void Init_Configuration()

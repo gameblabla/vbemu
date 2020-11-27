@@ -393,9 +393,9 @@ INLINE uint32 V810_RDCACHE(v810_timestamp_t timestamp, uint32 addr)
 
 INLINE uint16 V810_RDOP(v810_timestamp_t timestamp, uint32 addr, uint32 meow)
 {
-	if (!meow) meow = 2;
 	uint16 ret;
-
+	if (!meow) meow = 2;
+	
 	if(S_REG[CHCW] & 0x2)
 	{
 		uint32 d32 = V810_RDCACHE(timestamp, addr);
@@ -404,7 +404,7 @@ INLINE uint16 V810_RDOP(v810_timestamp_t timestamp, uint32 addr, uint32 meow)
 	else
 	{
 		timestamp += meow; //++;
-	ret = MemRead16(timestamp, addr);
+		ret = MemRead16(timestamp, addr);
 	}
 	return(ret);
 }

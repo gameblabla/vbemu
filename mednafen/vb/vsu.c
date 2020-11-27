@@ -70,7 +70,6 @@ static int32 last_ts;
 static Blip_Buffer *bb_l;
 static Blip_Buffer *bb_r;
 static Blip_Synth Synth;
-static Blip_Synth NoiseSynth;
 
 static const unsigned int Tap_LUT[8] = { 15 - 1, 11 - 1, 14 - 1, 5 - 1, 9 - 1, 7 - 1, 10 - 1, 12 - 1 };
 

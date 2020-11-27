@@ -57,7 +57,7 @@ void VBINPUT_SetInstantReadHack(bool enabled)
    InstantReadHack = enabled;
 }
 
-void VBINPUT_SetInput(int port, const char *type, void *ptr)
+void VBINPUT_SetInput(void *ptr)
 {
    data_ptr = (uint8 *)ptr;
 }

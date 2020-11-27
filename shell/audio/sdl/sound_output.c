@@ -8,7 +8,7 @@
 
 static int32_t BUFFSIZE;
 static uint8_t *buffer;
-static uint32_t buf_read_pos = 0;
+static int32_t buf_read_pos = 0;
 static uint32_t buf_write_pos = 0;
 static int32_t buffered_bytes = 0;
 
@@ -36,7 +36,7 @@ static int32_t sdl_read_buffer(uint8_t* data, int32_t len)
 
 static void sdl_write_buffer(uint8_t* data, int32_t len)
 {
-	for(uint32_t i = 0; i < len; i += 4) 
+	for(int32_t i = 0; i < len; i += 4) 
 	{
 		if(buffered_bytes == BUFFSIZE) return; // just drop samples
 		*(int32_t*)((char*)(buffer + buf_write_pos)) = *(int32_t*)((char*)(data + i));
@@ -100,5 +100,9 @@ void Audio_Close()
 	SDL_PauseAudio(1);
 	SDL_CloseAudio();
 	SDL_QuitSubSystem(SDL_INIT_AUDIO);
-	buffer = NULL;
+	if (buffer)
+	{
+		free(buffer);
+		buffer = NULL;
+	}
 }

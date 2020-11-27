@@ -45,10 +45,9 @@ void VIP_Power(void) MDFN_COLD;
 
 void VIP_SetInstantDisplayHack(bool);
 void VIP_SetAllowDrawSkip(bool);
-void VIP_Set3DMode(uint32 mode, bool reverse, uint32 prescale, uint32 sbs_separation);
+void VIP_Set3DMode(uint32 prescale, uint32 sbs_separation);
 void VIP_SetParallaxDisable(bool disabled);
 void VIP_SetDefaultColor(uint32 default_color);
-void VIP_SetAnaglyphColors(uint32 lcolor, uint32 rcolor);	/* R << 16, G << 8, B << 0 */
 
 v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp);
 void VIP_ResetTS(void);

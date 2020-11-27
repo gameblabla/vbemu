@@ -277,7 +277,7 @@ else
 
 static int obj_search_which;
 
-static void DrawOBJ(uint8 *fb[2], uint16 Y, bool lron[2])
+static void DrawOBJ(uint8 *fb, uint16 Y, bool lron[2])
 {
  int32 oam;
  const uint16 *CHR16 = CHR_RAM;
@@ -294,7 +294,7 @@ static void DrawOBJ(uint8 *fb[2], uint16 Y, bool lron[2])
  oam = start_oam;
  do
  {
-  int lr;
+  int lr = 0;
   uint32 pixels_save;
   uint32 char_no;
   uint32 jx, jp;
@@ -319,7 +319,6 @@ static void DrawOBJ(uint8 *fb[2], uint16 Y, bool lron[2])
   char_no = oam_ptr[3] & 0x7FF;
   pixels_save = CHR16[char_no * 8 + char_sub_y];
 
-  for(lr = 0; lr < 2; lr++)
   {
    uint32 pixels;
    int32 x;
@@ -331,7 +330,7 @@ static void DrawOBJ(uint8 *fb[2], uint16 Y, bool lron[2])
 
    if(x >= -7 && x < 384)	// Make sure we always keep the pitch of our 384x8 buffer large enough(with padding before and after the visible space)
    {
-    uint8 *target = &fb[lr][x];
+    uint8 *target = &fb[x];
 
     if(oam_ptr[3] & 0x2000)
     {
@@ -357,30 +356,6 @@ static void DrawOBJ(uint8 *fb[2], uint16 Y, bool lron[2])
       pixels >>= 2;
      }
     }
-     #if 0
-    if(oam_ptr[3] & 0x2000)
-    {
-     if((pixels >> 14) & 3) fb[lr][0 + x] = JPLT_Cache[palette_selector][(pixels >> 14) & 3];
-     if((pixels >> 12) & 3) fb[lr][1 + x] = JPLT_Cache[palette_selector][(pixels >> 12) & 3];
-     if((pixels >> 10) & 3) fb[lr][2 + x] = JPLT_Cache[palette_selector][(pixels >> 10) & 3];
-     if((pixels >> 8) & 3) fb[lr][3 + x] = JPLT_Cache[palette_selector][(pixels >> 8) & 3];
-     if((pixels >> 6) & 3) fb[lr][4 + x] = JPLT_Cache[palette_selector][(pixels >> 6) & 3];
-     if((pixels >> 4) & 3) fb[lr][5 + x] = JPLT_Cache[palette_selector][(pixels >> 4) & 3];
-     if((pixels >> 2) & 3) fb[lr][6 + x] = JPLT_Cache[palette_selector][(pixels >> 2) & 3];
-     if((pixels >> 0) & 3) fb[lr][7 + x] = JPLT_Cache[palette_selector][(pixels >> 0) & 3];
-    }
-    else
-    {
-     if((pixels >> 0) & 3) fb[lr][0 + x] = JPLT_Cache[palette_selector][(pixels >> 0) & 3];
-     if((pixels >> 2) & 3) fb[lr][1 + x] = JPLT_Cache[palette_selector][(pixels >> 2) & 3];
-     if((pixels >> 4) & 3) fb[lr][2 + x] = JPLT_Cache[palette_selector][(pixels >> 4) & 3];
-     if((pixels >> 6) & 3) fb[lr][3 + x] = JPLT_Cache[palette_selector][(pixels >> 6) & 3];
-     if((pixels >> 8) & 3) fb[lr][4 + x] = JPLT_Cache[palette_selector][(pixels >> 8) & 3];
-     if((pixels >> 10) & 3) fb[lr][5 + x] = JPLT_Cache[palette_selector][(pixels >> 10) & 3];
-     if((pixels >> 12) & 3) fb[lr][6 + x] = JPLT_Cache[palette_selector][(pixels >> 12) & 3];
-     if((pixels >> 14) & 3) fb[lr][7 + x] = JPLT_Cache[palette_selector][(pixels >> 14) & 3];
-    }
-#endif
 
    }
 
@@ -390,13 +365,12 @@ static void DrawOBJ(uint8 *fb[2], uint16 Y, bool lron[2])
 }
 
 
-void VIP_DrawBlock(uint8 block_no, uint8 *fb_l, uint8 *fb_r)
+void VIP_DrawBlock(uint8 block_no, uint8 *fb_l)
 {
- int y, world, lr;
+ int y, world, lr = 0;
  for( y = 0; y < 8; y++)
  {
   memset(fb_l + y * 512, BKCOL, 384);
-  memset(fb_r + y * 512, BKCOL, 384);
  }
 
  obj_search_which = 3;
@@ -440,7 +414,7 @@ void VIP_DrawBlock(uint8 block_no, uint8 *fb_l, uint8 *fb_r)
 
   for(y = 0; y < 8; y++)
   {
-   uint8 *fb[2] = { &fb_l[y * 512], &fb_r[y * 512] };
+   uint8 *fb = { &fb_l[y * 512] };
 
    if(bgm == BGM_OBJ)
    {
@@ -453,17 +427,15 @@ void VIP_DrawBlock(uint8 block_no, uint8 *fb_l, uint8 *fb_r)
    {
     //if(((block_no * 8) + y) == 128)
     // printf("Draw affine:  %d %d\n", gx, gp);
-    for(lr = 0; lr < 2; lr++)
     {
      if(lron[lr])
      {
-      DrawAffine(fb[lr], (block_no * 8) + y, lr, param_base, bgmap_base * 4096, over, overplane_char, scx, scy,
+      DrawAffine(fb, (block_no * 8) + y, lr, param_base, bgmap_base * 4096, over, overplane_char, scx, scy,
                         gx + (lr ? gp : -gp), gy, window_width, window_height);
      }
     }
    }
    else
-   for(lr = 0; lr < 2; lr++)
    {
     uint16 srcX, srcY;
     uint16 RealY = (block_no * 8) + y;
@@ -481,7 +453,7 @@ void VIP_DrawBlock(uint8 block_no, uint8 *fb_l, uint8 *fb_r)
      if(bgm == 1)	// HBias
       srcX += (int16)DRAM[(param_base + (((RealY - DestY) * 2) | lr)) & 0xFFFF];
 
-     DrawBG(fb[lr], RealY, lr, bgmap_base, over, overplane_char, (int32)(int16)srcX, (int32)(int16)srcY, scx, scy, DestX, DestY, window_width, window_height);
+     DrawBG(fb, RealY, lr, bgmap_base, over, overplane_char, (int32)(int16)srcX, (int32)(int16)srcY, scx, scy, DestX, DestY, window_width, window_height);
     }
    }
   }
