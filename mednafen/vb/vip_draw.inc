@@ -380,7 +380,7 @@ void VIP_DrawBlock(uint8 block_no, uint8 *fb_l)
   const uint16 *world_ptr = &DRAM[(0x1D800 + world * 0x20) >> 1];
 
   uint32 bgmap_base = world_ptr[0] & 0xF;
-  bool end = world_ptr[0] & 0x40;
+  bool end_w = world_ptr[0] & 0x40;
   bool over = world_ptr[0] & 0x80;
   uint32 scy = (world_ptr[0] >> 8) & 3;
   uint32 scx = (world_ptr[0] >> 10) & 3;
@@ -397,10 +397,10 @@ void VIP_DrawBlock(uint8 block_no, uint8 *fb_l)
   uint16 window_height = (world_ptr[8] & 0x3FF);
   uint32 param_base = (world_ptr[9] & 0xFFF0);
   uint16 overplane_char = world_ptr[10];
-
-  if(end)
-   break;
-
+  
+  if (end_w)
+  break;
+  
   //if(((512 << scx) + (512 << scy)) > 4096)
   //{
    //printf("BG Size too large for world: %d(scx=%d, scy=%d)\n", world, scx, scy);
@@ -442,10 +442,10 @@ void VIP_DrawBlock(uint8 block_no, uint8 *fb_l)
     uint16 DestX;
     uint16 DestY;
 
-    srcX = mx + (lr ? mp : -mp);
+    srcX = mx + (-mp);
     srcY = my + (RealY - gy);
 
-    DestX = gx + (lr ? gp : -gp);
+    DestX = gx + (-gp);
     DestY = gy;
 
     if(lron[lr])

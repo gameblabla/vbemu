@@ -475,7 +475,7 @@ static int Load(const uint8_t *data, size_t size)
 	V810_SetIOReadHandlers(MemRead8, MemRead16, NULL);
 	V810_SetIOWriteHandlers(MemWrite8, MemWrite16, NULL);
 
-	for(int i = 0; i < 256; i++)
+	for(uint_fast32_t i = 0; i < 256; i++)
 	{
 		V810_SetMemReadBus32(i, false);
 		V810_SetMemWriteBus32(i, false);
@@ -483,9 +483,9 @@ static int Load(const uint8_t *data, size_t size)
 
 	Map_Addresses = malloc(8192 * 4);
    
-	for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
+	for(uint_fast64_t A = 0; A < 1ULL << 32; A += (1 << 27))
 	{
-		for(uint64 sub_A = 5 << 24; sub_A < (6 << 24); sub_A += 65536)
+		for(uint_fast64_t sub_A = 5 << 24; sub_A < (6 << 24); sub_A += 65536)
 		{
 			Map_Addresses[map_size++] = A + sub_A;
 		}
@@ -496,26 +496,26 @@ static int Load(const uint8_t *data, size_t size)
 	GPROM_Mask = (size < 65536) ? (65536 - 1) : (size - 1);
 
 	map_size = 0;
-	for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
+	for(uint_fast64_t A = 0; A < 1ULL << 32; A += (1 << 27))
 	{
-		for(uint64 sub_A = 7 << 24; sub_A < (8 << 24); sub_A += GPROM_Mask + 1)
+		for(uint_fast64_t sub_A = 7 << 24; sub_A < (8 << 24); sub_A += GPROM_Mask + 1)
 		{
 			Map_Addresses[map_size++] = A + sub_A;
 		}
 	}
 
 	GPROM = V810_SetFastMap(Map_Addresses, GPROM_Mask + 1, map_size, "Cart ROM");
-	map_size = 0;
 
 	// Mirror ROM images < 64KiB to 64KiB
-	for(uint64 i = 0; i < 65536; i += size)
+	for(uint_fast32_t i = 0; i < 65536; i += size)
 		memcpy(GPROM + i, data, size);
 
 	GPRAM_Mask = 0xFFFF;
 
-	for(uint64 A = 0; A < 1ULL << 32; A += (1 << 27))
+	map_size = 0;
+	for(uint_fast64_t A = 0; A < 1ULL << 32; A += (1 << 27))
 	{
-		for(uint64 sub_A = 6 << 24; sub_A < (7 << 24); sub_A += GPRAM_Mask + 1)
+		for(uint_fast64_t sub_A = 6 << 24; sub_A < (7 << 24); sub_A += GPRAM_Mask + 1)
 		{
 			Map_Addresses[map_size++] = A + sub_A;
 		}
@@ -588,7 +588,7 @@ static void Emulate(EmulateSpecStruct *espec, int16_t *sound_buf)
 
 	if(sound_buf)
 	{
-		for(int y = 0; y < 2; y++)
+		for(uint_fast8_t y = 0; y < 2; y++)
 		{
 			Blip_Buffer_end_frame(&sbuf[y], (v810_timestamp + VSU_CycleFix) >> 2);
 			espec->SoundBufSize = Blip_Buffer_read_samples(&sbuf[y], sound_buf + y, espec->SoundBufMaxSize);
@@ -838,9 +838,8 @@ void Emulation_Run(void)
 	Emulate(&spec, sound_buf);
 
 	//int16 *const SoundBuf = sound_buf + spec.SoundBufSizeALMS * EmulatedVB.soundchan;
-	int32 SoundBufSize = spec.SoundBufSize - spec.SoundBufSizeALMS;
 	//const int32 SoundBufMaxSize = spec.SoundBufMaxSize - spec.SoundBufSizeALMS;
-	spec.SoundBufSize = spec.SoundBufSizeALMS + SoundBufSize;
+	spec.SoundBufSize = spec.SoundBufSizeALMS + (spec.SoundBufSize - spec.SoundBufSizeALMS);
    
 #ifdef FRAMESKIP
 	newTick = Timer_Read();
@@ -885,6 +884,7 @@ void Clean(void)
    surf.format.Gshift     = 0;
    surf.format.Bshift     = 0;
    surf.format.Ashift     = 0;
+   retro_unload_game();
 }
 
 
@@ -942,36 +942,6 @@ bool retro_unserialize(const void *data, size_t size)
    return MDFNSS_LoadSM(&st, 0, 0);
 }
 
-void *retro_get_memory_data(unsigned type)
-{
-   switch(type)
-   {
-      case 0:
-         return WRAM;
-      case 1:
-         return GPRAM;
-      default:
-         break;
-   }
-
-   return NULL;
-}
-
-size_t retro_get_memory_size(unsigned type)
-{
-   switch(type)
-   {
-      case 0:
-         return 0x10000;
-      case 1:
-         return GPRAM_Mask + 1;
-      default:
-         break;
-   }
-
-   return 0;
-}
-
 void SaveState(char* path, uint_fast8_t state)
 {	
 	FILE* savefp;
@@ -1018,7 +988,7 @@ void SaveState(char* path, uint_fast8_t state)
 void SRAM_Save(char* path, uint_fast8_t state)
 {	
 	FILE* savefp;
-	size_t file_size = 0;
+	size_t file_size;
 	if (state == 1)
 	{
 		savefp = fopen(path, "rb");

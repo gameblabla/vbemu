@@ -205,7 +205,6 @@ static void Input_Remapping()
 
 	while(!exit_input)
 	{
-		pressed = 0;
 		SDL_FillRect( backbuffer, NULL, 0 );
 
         while (SDL_PollEvent(&Event))
@@ -270,6 +269,7 @@ static void Input_Remapping()
 								{
 									option.config_buttons[currentselection - 1] = Event.key.keysym.sym;
 									exit_map = 1;
+									pressed = 0;
 								}
 							}
 						}

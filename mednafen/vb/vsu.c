@@ -540,7 +540,9 @@ int VSU_StateAction(StateMem *sm, int load, int data_only)
    return MDFNSS_StateAction(sm, load, data_only, StateRegs, "VSU", false);
 }
 
-uint8 VSU_PeekWave(const unsigned int which, uint32 Address)
+/* Unused */
+
+/*uint8 VSU_PeekWave(const unsigned int which, uint32 Address)
 {
    //assert(which <= 4);
 
@@ -569,4 +571,4 @@ void VSU_PokeModWave(uint32 Address, uint8 value)
    Address &= 0x1F;
 
    ModData[Address] = value & 0xFF;
-}
+}*/

@@ -237,10 +237,6 @@ void VIP_Set3DMode(uint32 prescale, uint32 sbs_separation)
    }
 }
 
-void VIP_SetParallaxDisable(bool disabled)
-{
-   ParallaxDisabled = disabled;
-}
 
 void VIP_SetDefaultColor(uint32 default_color)
 {
@@ -249,16 +245,24 @@ void VIP_SetDefaultColor(uint32 default_color)
    VidSettingsDirty = true;
 }
 
+/*
+
+void VIP_SetParallaxDisable(bool disabled)
+{
+   ParallaxDisabled = disabled;
+}
+
 void VIP_SetInstantDisplayHack(bool val)
 {
    InstantDisplayHack = val;
 }
 
+
 void VIP_SetAllowDrawSkip(bool val)
 {
    AllowDrawSkip = val;
 }
-
+*/
 
 static uint16 FRMCYC;
 
@@ -643,10 +647,9 @@ uint8 VIP_Read8(int32 timestamp, uint32 A)
    switch(A >> 16)
    {
       case 0x0:
-      case 0x1:
          if((A & 0x7FFF) >= 0x6000)
             return VIP_MA16R8(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000));
-         return FB[(A >> 15) & 1][A & 0x7FFF];
+         return FB[0][A & 0x7FFF];
       case 0x2:
       case 0x3:
          return VIP_MA16R8(DRAM, A & 0x1FFFF);
@@ -1135,6 +1138,9 @@ int VIP_StateAction(StateMem *sm, int load, int data_only)
    return(ret);
 }
 
+
+/* Unused */
+/*
 uint32 VIP_GetRegister(const unsigned int id, char *special, const uint32 special_len)
 {
    switch(id)
@@ -1178,6 +1184,7 @@ uint32 VIP_GetRegister(const unsigned int id, char *special, const uint32 specia
 
    return 0xDEADBEEF;
 }
+
 
 void VIP_SetRegister(const unsigned int id, const uint32 value)
 {
@@ -1254,3 +1261,4 @@ void VIP_SetRegister(const unsigned int id, const uint32 value)
          break;
    }
 }
+*/
