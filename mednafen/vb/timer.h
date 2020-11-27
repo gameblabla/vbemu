@@ -27,7 +27,7 @@ void TIMER_Power(void) MDFN_COLD;
 
 int TIMER_StateAction(StateMem *sm, int load, int data_only);
 
-uint32 TIMER_GetRegister(const unsigned int id, char *special, const uint32 special_len);
+uint32 TIMER_GetRegister(const unsigned int id);
 
 void TIMER_SetRegister(const unsigned int id, const uint32 value);
 

@@ -12,7 +12,7 @@ extern "C" {
 void VBINPUT_Init(void);
 void VBINPUT_SetInstantReadHack(bool);
 
-void VBINPUT_SetInput(int port, const char *type, void *ptr);
+void VBINPUT_SetInput(void *ptr);
 
 uint8 VBINPUT_Read(v810_timestamp_t timestamp, uint32 A);
 

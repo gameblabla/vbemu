@@ -368,9 +368,7 @@ void VIP_Power(void)
    DPCTRL = 2;
    DisplayActive = false;
 
-
-
-   memset(FB, 0, 0x6000 * 2 * 2);
+   memset(FB, 0, 0x6000 * 2);
    memset(CHR_RAM, 0, 0x8000);
    memset(DRAM, 0, 0x20000);
 
@@ -918,32 +916,26 @@ v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
          DrawingCounter -= chunk_clocks;
          if(DrawingCounter <= 0)
          {
-            MDFN_ALIGN(8) uint8 DrawingBuffers[2][512 * 8];	// Don't decrease this from 512 unless you adjust vip_draw.inc(including areas that draw off-visible >= 384 and >= -7 for speed reasons)
+            MDFN_ALIGN(8) uint8 DrawingBuffers[512 * 8];	// Don't decrease this from 512 unless you adjust vip_draw.inc(including areas that draw off-visible >= 384 and >= -7 for speed reasons)
 
             if(!(skip && InstantDisplayHack && AllowDrawSkip))
             {
-               int lr;
-               VIP_DrawBlock(DrawingBlock, DrawingBuffers[0] + 8, DrawingBuffers[1] + 8);
+				VIP_DrawBlock(DrawingBlock, DrawingBuffers + 8);
+				int x;
+				uint8 *FB_Target = FB[DrawingFB] + DrawingBlock * 2;
+				for(x = 0; x < 384; x++)
+				{
+                     FB_Target[64 * x + 0] = (DrawingBuffers[8 + x + 512 * 0] << 0)
+                        | (DrawingBuffers[8 + x + 512 * 1] << 2)
+                        | (DrawingBuffers[8 + x + 512 * 2] << 4)
+                        | (DrawingBuffers[8 + x + 512 * 3] << 6);
 
-               for(lr = 0; lr < 2; lr++)
-               {
-                  int x;
-                  uint8 *FB_Target = FB[DrawingFB] + DrawingBlock * 2;
+                     FB_Target[64 * x + 1] = (DrawingBuffers[8 + x + 512 * 4] << 0) 
+                        | (DrawingBuffers[8 + x + 512 * 5] << 2)
+                        | (DrawingBuffers[8 + x + 512 * 6] << 4) 
+                        | (DrawingBuffers[8 + x + 512 * 7] << 6);
 
-                  for(x = 0; x < 384; x++)
-                  {
-                     FB_Target[64 * x + 0] = (DrawingBuffers[lr][8 + x + 512 * 0] << 0)
-                        | (DrawingBuffers[lr][8 + x + 512 * 1] << 2)
-                        | (DrawingBuffers[lr][8 + x + 512 * 2] << 4)
-                        | (DrawingBuffers[lr][8 + x + 512 * 3] << 6);
-
-                     FB_Target[64 * x + 1] = (DrawingBuffers[lr][8 + x + 512 * 4] << 0) 
-                        | (DrawingBuffers[lr][8 + x + 512 * 5] << 2)
-                        | (DrawingBuffers[lr][8 + x + 512 * 6] << 4) 
-                        | (DrawingBuffers[lr][8 + x + 512 * 7] << 6);
-
-                  }
-               }
+				}
             }
 
             SBOUT_InactiveTime = running_timestamp + 1120;

@@ -176,7 +176,7 @@ int TIMER_StateAction(StateMem *sm, int load, int data_only)
    return MDFNSS_StateAction(sm, load, data_only, StateRegs, "TIMER", false);
 }
 
-uint32 TIMER_GetRegister(const unsigned int id, char *special, const uint32 special_len)
+uint32 TIMER_GetRegister(const unsigned int id)
 {
    switch(id)
    {

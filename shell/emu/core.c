@@ -493,7 +493,9 @@ static int Load(const uint8_t *data, size_t size)
    if(size > (1 << 24))
       return(0);
 
+   #ifdef DEBUG
    printf("ROM:       %dKiB\n", (int)(size / 1024));
+   #endif
 
    V810_Init();
 
@@ -757,7 +759,7 @@ static void hookup_ports(bool force)
       return;
 
    /* Possible endian bug ... */
-   VBINPUT_SetInput(0, "gamepad", &input_buf[0]);
+   VBINPUT_SetInput(&input_buf[0]);
 
    initial_ports_hookup = true;
 }
@@ -767,8 +769,6 @@ bool Load_Game_Memory(char* game_name)
 	uint8_t* rom_data;
 	size_t length;
 	FILE* fp;
-	
-	check_variables();
 
 	fp = fopen(game_name, "rb");
 	if (!fp) return 0;
@@ -818,6 +818,7 @@ bool Load_Game_Memory(char* game_name)
 	surf.h                       = FB_HEIGHT;
 	surf.pitchinpix              = FB_WIDTH;
 	hookup_ports(true);
+	check_variables();
 
 	return true;
 }

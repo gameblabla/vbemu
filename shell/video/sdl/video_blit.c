@@ -128,6 +128,11 @@ void Video_Close()
 		SDL_FreeSurface(sdl_screen);
 		sdl_screen = NULL;
 	}
+	if (vb_surface)
+	{
+		SDL_FreeSurface(vb_surface);
+		vb_surface = NULL;
+	}
 	if (backbuffer)
 	{
 		SDL_FreeSurface(backbuffer);
