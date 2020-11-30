@@ -22,6 +22,8 @@
 #include "vb.h"
 #include "vip.h"
 
+#include "../hw_cpu/v810/v810_cpu.h"
+
 #include "../math_ops.h"
 #include "../masmem.h"
 #include "../state_helpers.h"
@@ -1059,7 +1061,7 @@ v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
                   RecalcBrightnessCache();
                }
 
-               VB_ExitLoop();
+               V810_Exit();
             }
          }
       }

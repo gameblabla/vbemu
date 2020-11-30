@@ -81,22 +81,6 @@ static int32 next_vip_ts, next_timer_ts, next_input_ts;
 
 static uint32 IRQ_Asserted;
 
-MDFNGI EmulatedVB =
-{
-	MDFN_MASTERCLOCK_FIXED(VB_MASTER_CLOCK),
-	0,
-	0,   // lcm_width
-	0,   // lcm_height
-	384,   // Nominal width
-	224,   // Nominal height
-	384,   // Framebuffer width
-	224,   // Framebuffer height
-	2,     // Number of output sound channels
-	44100, // Sound frequency
-};
-
-MDFNGI *MDFNGameInfo = &EmulatedVB;
-
 static INLINE void RecalcIntLevel(void)
 {
    int ilevel = -1;
@@ -533,42 +517,14 @@ static int Load(const uint8_t *data, size_t size)
 	VSU_Init(&sbuf[0], &sbuf[1]);
 	VBINPUT_Init();
 	VIP_Set3DMode(1, 0);
-	MDFNGameInfo->fps = (int64)20000000 * 65536 * 256 / (259 * 384 * 4);
 	VB_Power();
-
-	MDFNGameInfo->nominal_width = 384;
-	MDFNGameInfo->nominal_height = 224;
-	MDFNGameInfo->fb_width = 384;
-	MDFNGameInfo->fb_height = 224;
-
-	MDFNGameInfo->lcm_width = MDFNGameInfo->fb_width;
-	MDFNGameInfo->lcm_height = MDFNGameInfo->fb_height;
 
 	return(1);
 }
 
 static void CloseGame(void)
 {
-   //VIP_Kill();
-
-   /*
-      if(GPRAM)
-      {
-      MDFN_free(GPRAM);
-      GPRAM = NULL;
-      }
-
-      if(GPROM)
-      {
-      MDFN_free(GPROM);
-      GPROM = NULL;
-      }
-      */
-}
-
-void VB_ExitLoop(void)
-{
-   V810_Exit();
+	V810_Kill();
 }
 
 static void Emulate(EmulateSpecStruct *espec, int16_t *sound_buf)
@@ -653,8 +609,6 @@ static void DoSimpleCommand(int cmd)
 
 static bool MDFNI_LoadGame(const uint8_t *data, size_t size)
 {
-   MDFNGameInfo = &EmulatedVB;
-
    if(Load(data, size) <= 0)
       goto error;
 
@@ -662,19 +616,7 @@ static bool MDFNI_LoadGame(const uint8_t *data, size_t size)
 
 error:
    printf("Can't load ROM\n");
-   MDFNGameInfo = NULL;
    return false;
-}
-
-static void MDFNI_CloseGame(void)
-{
-   if(!MDFNGameInfo)
-      return;
-
-
-   CloseGame();
-
-   MDFNGameInfo = NULL;
 }
 
 static void hookup_ports(bool force);
@@ -710,7 +652,7 @@ static void check_variables(void)
 		Blip_Buffer_set_clock_rate(&sbuf[y], (long)(VB_MASTER_CLOCK / 4));
 		Blip_Buffer_bass_freq(&sbuf[y], 20);
 	}
-	VIP_SetDefaultColor(0xAA0000);
+	VIP_SetDefaultColor(0xAAAAAA);
 }
 
 #define MAX_PLAYERS 1
@@ -746,7 +688,7 @@ bool Load_Game_Memory(char* game_name)
 	if (!MDFNI_LoadGame(rom_data,length))
 		return false;
 
-	if (rom_data)
+	if (rom_data != NULL)
 	{
 		free(rom_data);
 		rom_data = NULL;
@@ -785,11 +727,6 @@ bool Load_Game_Memory(char* game_name)
 	check_variables();
 
 	return true;
-}
-
-void retro_unload_game(void)
-{
-   MDFNI_CloseGame();
 }
 
 static uint64_t audio_frames;
@@ -874,17 +811,17 @@ void Emulation_Run(void)
 
 void Clean(void)
 {
-   surf.pixels     = NULL;
-   surf.w          = 0;
-   surf.h          = 0;
-   surf.pitchinpix = 0;
-   surf.format.bpp        = 0;
-   surf.format.colorspace = 0;
-   surf.format.Rshift     = 0;
-   surf.format.Gshift     = 0;
-   surf.format.Bshift     = 0;
-   surf.format.Ashift     = 0;
-   retro_unload_game();
+	surf.pixels     = NULL;
+	surf.w          = 0;
+	surf.h          = 0;
+	surf.pitchinpix = 0;
+	surf.format.bpp        = 0;
+	surf.format.colorspace = 0;
+	surf.format.Rshift     = 0;
+	surf.format.Gshift     = 0;
+	surf.format.Bshift     = 0;
+	surf.format.Ashift     = 0;
+	CloseGame();
 }
 
 
@@ -907,26 +844,29 @@ size_t retro_serialize_size(void)
 
 bool retro_serialize(void *data, size_t size)
 {
-   StateMem st;
-   bool ret          = false;
-   uint8_t *_dat     = (uint8_t*)malloc(size);
+	StateMem st;
+	bool ret          = false;
+	uint8_t *_dat     = (uint8_t*)malloc(size);
 
-   if (!_dat)
-      return false;
+	if (!_dat)
+		return false;
 
-   /* Mednafen can realloc the buffer so we need to ensure this is safe. */
-   st.data           = _dat;
-   st.loc            = 0;
-   st.len            = 0;
-   st.malloced       = size;
-   st.initial_malloc = 0;
+	/* Mednafen can realloc the buffer so we need to ensure this is safe. */
+	st.data           = _dat;
+	st.loc            = 0;
+	st.len            = 0;
+	st.malloced       = size;
+	st.initial_malloc = 0;
 
-   ret = MDFNSS_SaveSM(&st, 0, 0, NULL, NULL, NULL);
+	ret = MDFNSS_SaveSM(&st, 0, 0, NULL, NULL, NULL);
 
-   memcpy(data, st.data, size);
-   free(st.data);
-
-   return ret;
+	memcpy(data, st.data, size);
+	if (st.data != NULL)
+	{
+	   free(st.data);
+	   st.data = NULL;
+	}
+	return ret;
 }
 
 bool retro_unserialize(const void *data, size_t size)

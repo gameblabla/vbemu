@@ -70,12 +70,12 @@ uint32_t Audio_Init()
 	aspec.userdata = NULL;
 
 	/* initialize the SDL Audio system */
-	if (SDL_InitSubSystem (SDL_INIT_AUDIO | SDL_INIT_NOPARACHUTE)) 
+	if (SDL_InitSubSystem (SDL_INIT_AUDIO)) 
 	{
 		printf("SDL: Initializing of SDL Audio failed: %s.\n", SDL_GetError());
 		return 1;
 	}
-
+	
 	/* Open the audio device and start playing sound! */
 	if(SDL_OpenAudio(&aspec, &obtained) < 0) 
 	{
@@ -100,7 +100,7 @@ void Audio_Close()
 	SDL_PauseAudio(1);
 	SDL_CloseAudio();
 	SDL_QuitSubSystem(SDL_INIT_AUDIO);
-	if (buffer)
+	if (buffer != NULL)
 	{
 		free(buffer);
 		buffer = NULL;

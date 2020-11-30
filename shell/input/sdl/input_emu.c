@@ -62,6 +62,10 @@ uint16_t Read_Input(void)
 		}
 	}
 	
+#ifdef GKD350_BUG_INPUT
+	if (keys[SDLK_RETURN] && keys[SDLK_ESCAPE]) emulator_state = 1;
+#endif
+	
 	// UP
 	if (keys[option.config_buttons[0] ] == SDL_PRESSED
 #ifdef ENABLE_JOYSTICKCODE

@@ -25,13 +25,17 @@ DEFINES		+= -DWANT_16BPP -DFRONTEND_SUPPORTS_RGB565 -DFRAMESKIP -DENABLE_JOYSTIC
 
 CFLAGS		= -Wall -Wextra -Ofast -fdata-sections -ffunction-sections -fsection-anchors -fno-builtin -mplt -mframe-header-opt -mno-fp-exceptions -mno-check-zero-division -fsingle-precision-constant -fno-common -march=mips32r2 -mtune=mips32r2 -flto -fno-PIC -mno-shared
 CFLAGS		+= $(INCLUDES) $(DEFINES)
+CFLAGS		+= -mlong32 -mno-xgot -fsection-anchors -fno-builtin
+CFLAGS		+= -fno-math-errno -fgcse-las -fgcse-sm -fmerge-all-constants -fno-ident -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables
+CFLAGS		+= -freorder-functions
+CFLAGS		+= -fipa-pta -fsection-anchors -fdelete-dead-exceptions  -freorder-functions
 
 ifeq ($(PROFILE), YES)
 CFLAGS 		+= -fprofile-generate=/usr/local/home/vbemu_gcda
 else ifeq ($(PROFILE), APPLY)
 CFLAGS		+= -fprofile-use -fbranch-probabilities
 endif
-LDFLAGS     = -nodefaultlibs -lc -lgcc -lm -lSDL -lz -Wl,-O1,--sort-common,--as-needed,--gc-sections -flto -no-pie -s
+LDFLAGS     = -nodefaultlibs -lc -lgcc -lm -lSDL -lz -Wl,-z,norelro -Wl,--hash-style=gnu -Wl,--build-id=none -Wl,-O1,--sort-common,--as-needed,--gc-sections -flto -no-pie -s
 
 
 ifeq ($(SOUND_ENGINE), alsa)

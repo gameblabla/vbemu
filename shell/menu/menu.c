@@ -27,11 +27,11 @@ extern SDL_Surface *sdl_screen;
 extern char GameName_emu[512];
 
 static uint8_t save_slot = 0;
-static const int8_t upscalers_available = 2
+/*static const int8_t upscalers_available = 2
 #ifdef SCALE2X_UPSCALER
 +1
 #endif
-;
+;*/
 
 static void SaveState_Menu(uint_fast8_t load_mode, uint_fast8_t slot)
 {

@@ -10,8 +10,8 @@ static void Set_Red(uint8_t r, uint16_t entry)
 {
 	if (entry > 255) return;
 	colors[entry].r = r;
-	colors[entry].g = 0;
-	colors[entry].b = 0;
+	colors[entry].g = r;
+	colors[entry].b = r;
 }
 
 void Set_VB_palette(void)

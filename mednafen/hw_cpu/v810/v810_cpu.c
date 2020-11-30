@@ -69,8 +69,6 @@ static void RecalcIPendingCache(void);
 static v810_timestamp_t next_event_ts = 0x7FFFFFFF;
 v810_timestamp_t v810_timestamp = 0;
 
-static void V810_Run_Fast(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp)) NO_INLINE;
-
 extern uint8 MDFN_FASTCALL MemRead8(v810_timestamp_t timestamp, uint32 A);
 extern uint16 MDFN_FASTCALL MemRead16(v810_timestamp_t timestamp, uint32 A);
 extern void MDFN_FASTCALL MemWrite8(v810_timestamp_t timestamp, uint32 A, uint8_t V);
@@ -460,7 +458,11 @@ bool V810_Init(void)
 
 void V810_Kill(void)
 {
-	if (FastMapAllocList) free(FastMapAllocList);
+	if (FastMapAllocList != NULL)
+	{
+		free(FastMapAllocList);
+		FastMapAllocList = NULL;
+	}
 }
 
 void V810_SetInt(int level)
@@ -665,29 +667,23 @@ INLINE uint32 V810_GetSREG(unsigned int which)
 #define RB_RDOP(PC_offset, ...) LoadU16_LE((uint16 *)&PC_ptr[PC_offset])
 #endif
 
-static void V810_Run_Fast(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp))
+v810_timestamp_t V810_Run(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp))
 {
- #define RB_ADDBT(n,o,p)
- #define RB_CPUHOOK(n)
+	Running = true;
+	#define RB_ADDBT(n,o,p)
+	#define RB_CPUHOOK(n)
 
- #include "v810_oploop.inc"
+	#include "v810_oploop.inc"
 
- #undef RB_CPUHOOK
- #undef RB_ADDBT
+	#undef RB_CPUHOOK
+	#undef RB_ADDBT
+	return(v810_timestamp);
 }
 
-//
 // Undefine fast mode defines
 //
 #undef RB_GETPC
 #undef RB_RDOP
-
-v810_timestamp_t V810_Run(int32 MDFN_FASTCALL (*event_handler)(const v810_timestamp_t timestamp))
-{
-	Running = true;
-	V810_Run_Fast(event_handler);
-	return(v810_timestamp);
-}
 
 void V810_Exit(void)
 {
@@ -719,11 +715,6 @@ void V810_SetPR(const unsigned int which, uint32 value)
 uint32 V810_GetSR(const unsigned int which)
 {
  return(V810_GetSREG(which));
-}
-
-void V810_SetSR(const unsigned int which, uint32 value)
-{
-// SetSREG(timestamp, which, value);
 }
 
 
