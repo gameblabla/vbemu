@@ -44,7 +44,7 @@ SDL_Surface *sdl_screen, *backbuffer, *vb_surface;
 uint32_t* __restrict__ internal_pix;
 #define BPP_TOSET 32
 #elif defined(WANT_16BPP)
-#define SDL_FLAGS SDL_HWSURFACE
+#define SDL_FLAGS SDL_HWSURFACE | SDL_TRIPLEBUF
 uint16_t* __restrict__ internal_pix;
 #define BPP_TOSET 16
 #elif defined(WANT_8BPP)
@@ -87,7 +87,7 @@ void Set_Video_Menu()
 	 * It could be an issue with the old SDL version that we are using..
 	 * I don't know. We need to compare it against the GCW0's SDL.
 	 * */
-	sdl_screen = SDL_SetVideoMode(0, 0, 16, SDL_FLAGS);
+	sdl_screen = SDL_SetVideoMode(320, 240, 16, SDL_FLAGS);
 	
 	SDL_FillRect(sdl_screen, NULL, 0);
 	SDL_Flip(sdl_screen);
@@ -99,7 +99,7 @@ void Set_Video_Menu()
 
 void Set_Video_InGame()
 {
-	sdl_screen = SDL_SetVideoMode(0, 0, BPP_TOSET, SDL_FLAGS);
+	sdl_screen = SDL_SetVideoMode(320, 240, BPP_TOSET, SDL_FLAGS);
 	
 #if defined(WANT_32BPP)
 	internal_pix = (uint32_t*)vb_surface->pixels;
@@ -149,6 +149,6 @@ void Update_Video_Menu()
 
 void Update_Video_Ingame(void)
 {
-	SDL_SoftStretch(vb_surface, NULL, sdl_screen, NULL);
+	scale_384x224_to_320x224((uint32_t*)sdl_screen->pixels + (320*4), (uint32_t*)vb_surface->pixels);
 	SDL_Flip(sdl_screen);
 }

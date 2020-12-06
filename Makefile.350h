@@ -1,0 +1,69 @@
+PRGNAME     = vb.elf
+CC          = /opt/gcw0-toolchain-static/bin/mipsel-linux-gcc
+
+#### Configuration
+
+# Possible values : retrostone, rs97, rs90
+PORT = sdl
+# Possible values : alsa, oss, portaudio
+SOUND_ENGINE = sdl
+
+PROFILE = 0
+
+#### End of Configuration
+
+GIT_VERSION := " $(shell git rev-parse --short HEAD || echo unknown)"
+
+INCLUDES	= -Ilibretro-common/include -Isrc
+INCLUDES	+= -Ishell/headers -Ishell/video/$(PORT) -Ishell/audio -Ishell/scalers -Ishell/input/sdl -Ishell/fonts -Ishell/menu
+INCLUDES	+= -Imednafen -I./mednafen/vb -I./mednafen/sound -I. -Ishell/emu -Imednafen/include -Ishell/input -Imednafen/video
+
+DEFINES		= -DLSB_FIRST -DINLINE="inline" -DINLINE="inline" -DNDEBUG -DWANT_STEREO_SOUND
+DEFINES		+= -DMEDNAFEN_VERSION_NUMERIC=931
+DEFINES		+= -DWANT_16BPP -DFRONTEND_SUPPORTS_RGB565 -DFRAMESKIP -DENABLE_JOYSTICKCODE -DGKD350_BUG_INPUT
+
+CFLAGS		= -Wall -Wextra -Ofast -fdata-sections -ffunction-sections -fsection-anchors -fno-builtin -mframe-header-opt -mno-fp-exceptions -mno-check-zero-division -fsingle-precision-constant -fno-common -march=mips32r2 -mtune=mips32r2 -flto -fno-PIC -mno-shared -mno-abicalls
+CFLAGS		+= $(INCLUDES) $(DEFINES)
+
+ifeq ($(PROFILE), YES)
+CFLAGS 		+= -fprofile-generate=/media/roms/vb_gcda
+else ifeq ($(PROFILE), APPLY)
+CFLAGS		+= -fprofile-use -fbranch-probabilities
+endif
+LDFLAGS     = -nodefaultlibs -lc -lgcc -lm -lSDL -lz -Wl,-O1,--sort-common,--as-needed,--gc-sections -flto -no-pie -s
+
+
+ifeq ($(SOUND_ENGINE), alsa)
+LDFLAGS 		+= -lasound
+endif
+ifeq ($(SOUND_ENGINE), portaudio)
+LDFLAGS 		+= -lasound -lportaudio
+endif
+
+ifeq ($(PROFILE), YES)
+LDFLAGS 	+= -lgcov
+endif
+
+# Files to be compiled
+SRCDIR 		=  ./src ./shell ./shell/scalers ./shell/emu ./shell/menu
+SRCDIR		+= ./shell/input/sdl/ ./shell/video/$(PORT) ./shell/audio/$(SOUND_ENGINE)
+SRCDIR		+= ./mednafen ./mednafen/vb ./mednafen/sound ./mednafen/hw_cpu/v810 ./mednafen/hw_cpu/v810/fpu-new
+
+VPATH		= $(SRCDIR)
+SRC_C		= $(foreach dir, $(SRCDIR), $(wildcard $(dir)/*.c))
+OBJ_C		= $(notdir $(patsubst %.c, %.o, $(SRC_C)))
+OBJS		= $(OBJ_C) $(OBJ_CPP)
+
+# Rules to make executable
+$(PRGNAME): $(OBJS)  
+	$(CC) $(CFLAGS) -std=gnu99 -o $(PRGNAME) $^ $(LDFLAGS)
+ifeq ($(HUGE_PAGES), 1)
+	hugeedit --text --data $(PRGNAME)
+endif
+
+
+$(OBJ_C) : %.o : %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+	
+clean:
+	rm -f $(PRGNAME)$(EXESUFFIX) *.o

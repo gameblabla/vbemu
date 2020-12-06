@@ -137,3 +137,60 @@ void bitmap_scale(uint32_t startx, uint32_t starty, uint32_t viswidth, uint32_t 
         y+=iy;
 	} while (--H);
 }
+
+
+/* Downscales a 384x224 image to 320x224.
+ *
+ * Input:
+ *   src: A packed 384x224 pixel image. The pixel format of this image is RGB 565.
+ * Output:
+ *   dst: A packed 320x224 pixel image. The pixel format of this image is RGB 565.
+ */
+
+#define cR(A) (((A) & 0xf800) >> 8)
+#define cG(A) (((A) & 0x7e0) >> 3)
+#define cB(A) (((A) & 0x1f) << 3)
+
+#define Weight1_4(A, B)  ((((cR(A) + cR(B) + cR(B) + cR(B)+ cR(B)) / 5) & 0xf8) << 8 | (((cG(A) + cG(B) + cG(B) + cG(B) + cG(B)) / 5) & 0xfc) << 3 | (((cB(A) + cB(B) + cB(B) + cB(B) + cB(B)) / 5) & 0xf8) >> 3)
+#define Weight4_1(A, B)  ((((cR(A) + cR(A) + cR(A) + cR(A)+ cR(B)) / 5) & 0xf8) << 8 | (((cG(A) + cG(A) + cG(A) + cG(A) + cG(B)) / 5) & 0xfc) << 3 | (((cB(A) + cB(A) + cB(A) + cB(A) + cB(B)) / 5) & 0xf8) >> 3)
+#define Weight2_3(A, B)  ((((cR(A) + cR(A) + cR(B) + cR(B)+ cR(B)) / 5) & 0xf8) << 8 | (((cG(A) + cG(A) + cG(B) + cG(B) + cG(B)) / 5) & 0xfc) << 3 | (((cB(A) + cB(A) + cB(B) + cB(B) + cB(B)) / 5) & 0xf8) >> 3)
+#define Weight3_2(A, B)  ((((cR(A) + cR(A) + cR(A) + cR(B)+ cR(B)) / 5) & 0xf8) << 8 | (((cG(A) + cG(A) + cG(A) + cG(B) + cG(B)) / 5) & 0xfc) << 3 | (((cB(A) + cB(A) + cB(A) + cB(B) + cB(B)) / 5) & 0xf8) >> 3)
+
+void scale_384x224_to_320x224(uint32_t* restrict dst, uint32_t* restrict src)
+{
+    uint16_t* Src16 = (uint16_t*) src;
+    uint16_t* Dst16 = (uint16_t*) dst;
+
+    // There are 64 blocks of 6 pixels horizontally, and 224 of 1 vertically.
+    // Each block of 6x1 becomes 5x1.
+
+    uint32_t BlockX, BlockY;
+    uint16_t* BlockSrc;
+    uint16_t* BlockDst;
+    for (BlockY = 0; BlockY < 224; BlockY++)
+    {
+        BlockSrc = Src16 + BlockY * 384;
+        BlockDst = Dst16 + BlockY * 320;
+        for (BlockX = 0; BlockX < 64; BlockX++)
+        {
+            // HORIZONTAL: 6 --> 5
+            // Before:                After:
+            // (a)(b)(c)(d)(e)(f)    (a)(bbbbc)(cccdd)(ddeee)(effff)
+
+            uint16_t  _1 = *(BlockSrc    );
+            *(BlockDst    ) = _1;
+            uint16_t  _2 = *(BlockSrc + 1);
+            uint16_t  _3 = *(BlockSrc + 2);
+            *(BlockDst + 1) = Weight4_1( _2,  _3);
+            uint16_t  _4 = *(BlockSrc + 3);
+            *(BlockDst + 2) = Weight3_2( _3,  _4);
+            uint16_t  _5 = *(BlockSrc + 4);
+            *(BlockDst + 3) = Weight2_3( _4,  _5);
+            uint16_t  _6 = *(BlockSrc + 5);
+            *(BlockDst + 4) = Weight1_4( _5,  _6);
+
+            BlockSrc += 6;
+            BlockDst += 5;
+        }
+    }
+}
