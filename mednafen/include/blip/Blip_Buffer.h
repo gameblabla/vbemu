@@ -102,9 +102,13 @@ static INLINE blip_resampled_time_t Blip_Buffer_resampled_time(
 blip_resampled_time_t Blip_Buffer_clock_rate_factor(Blip_Buffer* bbuf,
       long clock_rate);
 
-
+#ifdef FASTBUILD
+#define BLIP_BUFFER_ACCURACY 16
+#define BLIP_PHASE_BITS 6
+#else
 #define BLIP_BUFFER_ACCURACY 32
 #define BLIP_PHASE_BITS 8
+#endif
 
 // Number of bits in resample ratio fraction. Higher values give a more accurate ratio
 // but reduce maximum buffer size.

@@ -39,7 +39,7 @@ extern "C" {
 
 void VB_SetEvent(const int type, const v810_timestamp_t next_timestamp);
 
-void VBIRQ_Assert(int source, bool assert);
+void VBIRQ_Assert(int_fast8_t source, bool assert);
 
 #ifdef __cplusplus
 }

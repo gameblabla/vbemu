@@ -100,11 +100,13 @@ static uint32 BrightCLUT[2][4];
 static float ColorLUTNoGC[2][256][3];
 
 // A few settings:
+#ifndef FASTBUILD
 static bool InstantDisplayHack;
 static bool AllowDrawSkip;
-
-static bool VidSettingsDirty;
 static bool ParallaxDisabled;
+#endif
+static bool VidSettingsDirty;
+
 static uint32 Default_Color;
 
 static void MakeColorLUT(void)
@@ -338,9 +340,11 @@ static void CheckIRQ(void)
 
 bool VIP_Init(void)
 {
+#ifndef FASTBUILD
    InstantDisplayHack = true;
    AllowDrawSkip = true;
    ParallaxDisabled = false;
+#endif
    Default_Color = 0xAA0000;
    VBPrescale = 1;
    VBSBS_Separation = 0;
@@ -513,31 +517,16 @@ static INLINE uint16 ReadRegister(int32 timestamp, uint32 A)
    return(ret);
 }
 
-static INLINE void WriteRegister(int32 timestamp, uint32 A, uint16 V)
+static INLINE void WriteRegister(uint32 A, uint16 V)
 {
-#ifdef DEBUG
-   if(A & 1)
-      VIP_DBGMSG("Misaligned VIP Write: %08x %04x", A, V);
-#endif
-
    switch(A & 0xFE)
    {
       default:
-#ifdef DEBUG
-         VIP_DBGMSG("Unknown VIP register write: %08x %04x", A, V);
-#endif
          break;
       case 0x00:
          break; // Interrupt pending, read-only
       case 0x02:
          InterruptEnable = V & 0xE01F;
-
-#ifdef DEBUG
-         VIP_DBGMSG("Interrupt Enable: %04x", V);
-
-         if(V & 0x2000)
-            VIP_DBGMSG("Warning: VIP SB Hit Interrupt enable: %04x\n", V);
-#endif
          CheckIRQ();
          break;
       case 0x04:
@@ -594,9 +583,6 @@ static INLINE void WriteRegister(int32 timestamp, uint32 A, uint16 V)
 
          if(V & 1)
          {
-#ifdef DEBUG
-            VIP_DBGMSG("XPRST");
-#endif
             DrawingActive = 0;
             DrawingCounter = 0;
             InterruptPending &= ~(INT_SB_HIT | INT_XP_END | INT_TIME_ERR);
@@ -720,13 +706,8 @@ uint16 VIP_Read16(int32 timestamp, uint32 A)
    return 0;
 }
 
-void VIP_Write8(int32 timestamp, uint32 A, uint8 V)
+void VIP_Write8(uint32 A, uint8 V)
 {
-   //VIP_Update(timestamp); 
-
-   //if(A >= 0x3DC00 && A < 0x3E000)
-   // printf("%08x %02x\n", A, V);
-
    switch(A >> 16)
    {
       case 0x0:
@@ -745,45 +726,22 @@ void VIP_Write8(int32 timestamp, uint32 A, uint8 V)
       case 0x4:
       case 0x5:
          if(A >= 0x5E000)
-            WriteRegister(timestamp, A, V);
-#ifdef DEBUG
-         else
-            VIP_DBGMSG("Unknown VIP Write: %08x %02x", A, V);
-#endif
-         break;
-
-      case 0x6:
-#ifdef DEBUG
-         VIP_DBGMSG("Unknown VIP Write: %08x %02x", A, V);
-#endif
+            WriteRegister(A, V);
          break;
 
       case 0x7:
          if(A >= 0x8000)
             VIP_MA16W8(CHR_RAM, A & 0x7FFF, V);
-#ifdef DEBUG
-         else
-            VIP_DBGMSG("Unknown VIP Write: %08x %02x", A, V);
-#endif
          break;
-
       default:
-#ifdef DEBUG
-         VIP_DBGMSG("Unknown VIP Write: %08x %02x", A, V);
-#endif
          break;
    }
 
    //VB_SetEvent(VB_EVENT_VIP, timestamp + CalcNextEvent());
 }
 
-void VIP_Write16(int32 timestamp, uint32 A, uint16 V)
+void VIP_Write16(uint32 A, uint16 V)
 {
-   //VIP_Update(timestamp); 
-
-   //if(A >= 0x3DC00 && A < 0x3E000)
-   // printf("%08x %04x\n", A, V);
-
    switch(A >> 16)
    {
       case 0x0:
@@ -800,29 +758,13 @@ void VIP_Write16(int32 timestamp, uint32 A, uint16 V)
       case 0x4:
       case 0x5:
          if(A >= 0x5E000)
-            WriteRegister(timestamp, A, V);
-#ifdef DEBUG
-         else
-            VIP_DBGMSG("Unknown VIP Write: %08x %04x", A, V);
-#endif
-         break;
-      case 0x6:
-#ifdef DEBUG
-         VIP_DBGMSG("Unknown VIP Write: %08x %04x", A, V);
-#endif
+            WriteRegister(A, V);
          break;
       case 0x7:
          if(A >= 0x8000)
             VIP_MA16W16(CHR_RAM, A & 0x7FFF, V);
-#ifdef DEBUG
-         else
-            VIP_DBGMSG("Unknown VIP Write: %08x %04x", A, V);
-#endif
          break;
       default:
-#ifdef DEBUG
-         VIP_DBGMSG("Unknown VIP Write: %08x %04x", A, V);
-#endif
          break;
    }
 
@@ -891,9 +833,7 @@ static INLINE void CopyFBColumnToTarget_Anaglyph_BASE(void)
 
 static void CopyFBColumnToTarget_Anaglyph(void)
 {
-   const int lr = (DisplayRegion & 2) >> 1;
-
-   if(!lr)
+   if(!((DisplayRegion & 2) >> 1))
    {
       CopyFBColumnToTarget_Anaglyph_BASE();
    }
@@ -922,7 +862,12 @@ v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
          {
             MDFN_ALIGN(8) uint8 DrawingBuffers[512 * 8];	// Don't decrease this from 512 unless you adjust vip_draw.inc(including areas that draw off-visible >= 384 and >= -7 for speed reasons)
 
-            if(!(skip && InstantDisplayHack && AllowDrawSkip))
+            if(!(
+            skip 
+#ifndef FASTBUILD
+            && InstantDisplayHack && AllowDrawSkip
+#endif
+            ))
             {
 				if (DisplayFB == 0) /* Same optimisation as in CopyFBColumnToTarget_Anaglyph_BASE, only render to the left eye. speeds up VIP_drawblock by 2x */
 				{
@@ -976,8 +921,10 @@ v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
                   RecalcBrightnessCache();
                }
             }
+            #ifndef FASTBUILD
             if(!skip && !InstantDisplayHack)
                CopyFBColumnToTarget();
+            #endif
          }
 
          ColumnCounter = 259;
@@ -1029,7 +976,11 @@ v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
                   GameFrameCounter = 0;
                }
 
-               if(!skip && InstantDisplayHack)
+               if(!skip
+#ifndef FASTBUILD
+               && InstantDisplayHack
+#endif
+               )
                {
                   // Ugly kludge, fix in the future.
                   int32 save_DisplayRegion = DisplayRegion;

@@ -114,7 +114,7 @@ typedef struct
 	MDFN_Rect *LineWidths;
 
 	// Skip rendering this frame if true.  Set by the driver code.
-	int skip;
+	uint_fast8_t skip;
 
 	//
 	// If sound is disabled, the driver code must set SoundRate to false, SoundBuf to NULL, SoundBufMaxSize to 0.
