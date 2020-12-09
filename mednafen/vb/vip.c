@@ -831,7 +831,7 @@ void VIP_Write16(int32 timestamp, uint32 A, uint16 V)
 }
 
 static struct MDFN_Surface *surface;
-static bool skip;
+static uint_fast8_t skip;
 
 void VIP_StartFrame(EmulateSpecStruct *espec)
 {
@@ -1031,31 +1031,25 @@ v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
 
                if(!skip && InstantDisplayHack)
                {
-                  int lr;
                   // Ugly kludge, fix in the future.
                   int32 save_DisplayRegion = DisplayRegion;
                   int32 save_Column = Column;
                   uint8 save_Repeat = Repeat;
 
-                  for(lr = 0; lr < 2; lr++)
+                  DisplayRegion = 0 << 1;
+                  for(Column = 0; Column < 384; Column++)
                   {
-                     DisplayRegion = lr << 1;
-                     for(Column = 0; Column < 384; Column++)
-                     {
-                        if(!(Column & 3))
-                        {
-                           uint16 ctdata = VIP_MA16R16(DRAM, 0x1DFFE - ((Column >> 2) * 2) - (lr ? 0 : 0x200));
-
-                           if((ctdata >> 8) != Repeat)
-                           {
-                              Repeat = ctdata >> 8;
-                              RecalcBrightnessCache();
-                           }
-                        }
-
+						if(!(Column & 3))
+						{
+							uint16 ctdata = VIP_MA16R16(DRAM, 0x1DFFE - ((Column >> 2) * 2) - 0);
+							if((ctdata >> 8) != Repeat)
+							{
+								Repeat = ctdata >> 8;
+								RecalcBrightnessCache();
+							}
+						}
                         CopyFBColumnToTarget();
-                     }
-                  }
+				  }
                   DisplayRegion = save_DisplayRegion;
                   Column = save_Column;
                   Repeat = save_Repeat;
