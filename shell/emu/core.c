@@ -79,25 +79,23 @@ static uint8_t WCR;
 
 static int32 next_vip_ts, next_timer_ts, next_input_ts;
 
-static uint32 IRQ_Asserted;
+static int_fast8_t IRQ_Asserted;
 
 static INLINE void RecalcIntLevel(void)
 {
-   int ilevel = -1;
-
-   for(int i = 4; i >= 0; i--)
-   {
-      if(IRQ_Asserted & (1 << i))
-      {
-         ilevel = i;
-         break;
-      }
-   }
-
-   V810_SetInt(ilevel);
+	int_fast8_t ilevel = -1;
+	for(int_fast8_t i = 4; i >= 0; i--)
+	{
+		if(IRQ_Asserted & (1 << i))
+		{
+			ilevel = i;
+			break;
+		}
+	}
+	V810_SetInt(ilevel);
 }
 
-void VBIRQ_Assert(int source, bool assert)
+void VBIRQ_Assert(int_fast8_t source, bool assert)
 {
    /*assert(source >= 0 && source <= 4);*/
 
@@ -111,36 +109,25 @@ void VBIRQ_Assert(int source, bool assert)
 
 static uint8_t HWCTRL_Read(v810_timestamp_t timestamp, uint32 A)
 {
-   uint8_t ret = 0;
+	/* HWCtrl Bogus Read? */
+	if(A & 0x3) return 0;
 
-   /* HWCtrl Bogus Read? */
-   if(A & 0x3)
-      return(ret);
-
-   switch(A & 0xFF)
-   {
-      default:
-#if 0
-         printf("Unknown HWCTRL Read: %08x\n", A);
-#endif
-         break;
-
-      case 0x18:
-      case 0x1C:
-      case 0x20: ret = TIMER_Read(timestamp, A);
-                 break;
-
-      case 0x24: ret = WCR | 0xFC;
-                 break;
-
-      case 0x10:
-      case 0x14:
-      case 0x28: ret = VBINPUT_Read(timestamp, A);
-                 break;
-
-   }
-
-   return(ret);
+	switch(A & 0xFF)
+	{
+		default:
+		break;
+		case 0x18:
+		case 0x1C:
+		case 0x20:
+			return TIMER_Read(timestamp, A);
+		case 0x24:
+			return (WCR | 0xFC);
+		case 0x10:
+		case 0x14:
+		case 0x28:
+			return VBINPUT_Read(timestamp, A);
+	}
+	return 0;
 }
 
 static void HWCTRL_Write(v810_timestamp_t timestamp, uint32 A, uint8_t V)
@@ -172,114 +159,75 @@ static void HWCTRL_Write(v810_timestamp_t timestamp, uint32 A, uint8_t V)
 
 uint8 MDFN_FASTCALL MemRead8(v810_timestamp_t timestamp, uint32 A)
 {
-   uint8 ret = 0;
-   A &= (1 << 27) - 1;
-
-   //if((A >> 24) <= 2)
-   // printf("Read8: %d %08x\n", timestamp, A);
-
-   switch(A >> 24)
-   {
-      case 0: ret = VIP_Read8(timestamp, A);
-              break;
-
-      case 1: break;
-
-      case 2: ret = HWCTRL_Read(timestamp, A);
-              break;
-
-      case 3: break;
-      case 4: break;
-
-      case 5: ret = WRAM[A & 0xFFFF];
-              break;
-
-      case 6: if(GPRAM)
-                 ret = GPRAM[A & GPRAM_Mask];
-#if 0
-              else
-                 printf("GPRAM(Unmapped) Read: %08x\n", A);
-#endif
-              break;
-
-      case 7: ret = GPROM[A & GPROM_Mask];
-              break;
-   }
-   return(ret);
+	A &= (1 << 27) - 1;
+	switch(A >> 24)
+	{
+		case 0:
+			return VIP_Read8(timestamp, A);
+		case 2:
+			return HWCTRL_Read(timestamp, A);
+		case 5:
+			return WRAM[A & 0xFFFF];
+		case 6:
+			if(GPRAM) return GPRAM[A & GPRAM_Mask];
+		break;
+		case 7:
+			return GPROM[A & GPROM_Mask];
+		break;
+		default:
+		break;
+	}
+	return 0;
 }
 
 uint16 MDFN_FASTCALL MemRead16(v810_timestamp_t timestamp, uint32 A)
 {
- uint16 ret = 0;
-
- A &= (1 << 27) - 1;
-
- //if((A >> 24) <= 2)
- // printf("Read16: %d %08x\n", timestamp, A);
-
-
- switch(A >> 24)
- {
-  case 0: ret = VIP_Read16(timestamp, A);
-      break;
-
-  case 1: break;
-
-  case 2: ret = HWCTRL_Read(timestamp, A);
-      break;
-
-  case 3: break;
-
-  case 4: break;
-
-  case 5: ret = LoadU16_LE((uint16 *)&WRAM[A & 0xFFFF]);
-      break;
-
-  case 6: if(GPRAM)
-           ret = LoadU16_LE((uint16 *)&GPRAM[A & GPRAM_Mask]);
-#if 0
-      else printf("GPRAM(Unmapped) Read: %08x\n", A);
-#endif
-      break;
-
-  case 7: ret = LoadU16_LE((uint16 *)&GPROM[A & GPROM_Mask]);
-      break;
- }
- return(ret);
+	A &= (1 << 27) - 1;
+	switch(A >> 24)
+	{
+		default:
+		break;
+		case 0:
+			return VIP_Read16(timestamp, A);
+		case 2:
+			return HWCTRL_Read(timestamp, A);
+		case 5:
+			return LoadU16_LE((uint16 *)&WRAM[A & 0xFFFF]);
+		case 6: 
+		if(GPRAM)
+			return LoadU16_LE((uint16 *)&GPRAM[A & GPRAM_Mask]);
+		break;
+		case 7:
+			return LoadU16_LE((uint16 *)&GPROM[A & GPROM_Mask]);
+	}
+	return 0;
 }
 
 void MDFN_FASTCALL MemWrite8(v810_timestamp_t timestamp, uint32 A, uint8_t V)
 {
- A &= (1 << 27) - 1;
-
- //if((A >> 24) <= 2)
- // printf("Write8: %d %08x %02x\n", timestamp, A, V);
-
- switch(A >> 24)
- {
-  case 0: VIP_Write8(timestamp, A, V);
-          break;
-
-  case 1: VSU_Write((timestamp + VSU_CycleFix) >> 2, A, V);
-          break;
-
-  case 2: HWCTRL_Write(timestamp, A, V);
-          break;
-
-  case 3: break;
-
-  case 4: break;
-
-  case 5: WRAM[A & 0xFFFF] = V;
-          break;
-
-  case 6: if(GPRAM)
-           GPRAM[A & GPRAM_Mask] = V;
-          break;
-
-  case 7: // ROM, no writing allowed!
-          break;
- }
+	A &= (1 << 27) - 1;
+	switch(A >> 24)
+	{
+		case 0:
+			VIP_Write8(A, V);
+		break;
+		case 1:
+			VSU_Write((timestamp + VSU_CycleFix) >> 2, A, V);
+		break;
+		case 2:
+			HWCTRL_Write(timestamp, A, V);
+		break;
+		case 5:
+			WRAM[A & 0xFFFF] = V;
+		break;
+		case 6:
+		if(GPRAM)
+			GPRAM[A & GPRAM_Mask] = V;
+		break;
+		//case 7: // ROM, no writing allowed!
+		default:
+		break;
+	}
 }
 
 void MDFN_FASTCALL MemWrite16(v810_timestamp_t timestamp, uint32 A, uint16 V)
@@ -291,7 +239,7 @@ void MDFN_FASTCALL MemWrite16(v810_timestamp_t timestamp, uint32 A, uint16 V)
 
  switch(A >> 24)
  {
-  case 0: VIP_Write16(timestamp, A, V);
+  case 0: VIP_Write16(A, V);
           break;
 
   case 1: VSU_Write((timestamp + VSU_CycleFix) >> 2, A, V);
@@ -809,15 +757,15 @@ void Emulation_Run(void)
 
 	Audio_Write((int16_t*) sound_buf, spec.SoundBufSize);
 	audio_frames += spec.SoundBufSize;
-	Update_Video_Ingame(
+	
 #ifdef FRAMESKIP
-	spec.skip
-#endif
-);
-
-#ifdef FRAMESKIP
-	if (spec.skip == false) video_frames++;
+	if (spec.skip == false)
+	{
+		Update_Video_Ingame();
+		video_frames++;
+	}
 #else
+	Update_Video_Ingame();
 	video_frames++;
 #endif
 }

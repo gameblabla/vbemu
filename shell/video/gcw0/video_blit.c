@@ -40,7 +40,7 @@ SDL_Surface *sdl_screen, *backbuffer;
 /* GCW0 : Triple buffering causes flickering, for some reasons... */
 
 #if defined(WANT_32BPP)
-#define SDL_FLAGS SDL_HWSURFACE | SDL_DOUBLEBUF
+#define SDL_FLAGS SDL_HWSURFACE | SDL_TRIPLEBUF
 uint32_t* __restrict__ internal_pix;
 #elif defined(WANT_16BPP)
 #define SDL_FLAGS SDL_HWSURFACE
@@ -79,18 +79,19 @@ void Init_Video()
 
 void Set_Video_Menu()
 {
+	/* We do it before as to seeming avoid a wraping issue */
+	SDL_FillRect(sdl_screen, NULL, 0);
+	SDL_Flip(sdl_screen);
+	SDL_FillRect(sdl_screen, NULL, 0);
+	SDL_Flip(sdl_screen);
+	SDL_FillRect(sdl_screen, NULL, 0);
+	SDL_Flip(sdl_screen);
+	
 	/* There's a memory leak if it gets init to 320x240...
 	 * It could be an issue with the old SDL version that we are using..
 	 * I don't know. We need to compare it against the GCW0's SDL.
 	 * */
 	sdl_screen = SDL_SetVideoMode(640, 480, 16, SDL_FLAGS);
-	
-	SDL_FillRect(sdl_screen, NULL, 0);
-	SDL_Flip(sdl_screen);
-	SDL_FillRect(sdl_screen, NULL, 0);
-	SDL_Flip(sdl_screen);
-	SDL_FillRect(sdl_screen, NULL, 0);
-	SDL_Flip(sdl_screen);
 }
 
 void Set_Video_InGame()
@@ -139,16 +140,7 @@ void Update_Video_Menu()
 	SDL_Flip(sdl_screen);
 }
 
-void Update_Video_Ingame(
-#ifdef FRAMESKIP
-	uint_fast8_t skip
-#endif
-)
+void Update_Video_Ingame()
 {
-#ifdef FRAMESKIP
-	if (!skip)
-#endif
-	{
-		SDL_Flip(sdl_screen);
-	}
+	SDL_Flip(sdl_screen);
 }
