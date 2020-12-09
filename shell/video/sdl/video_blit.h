@@ -2,6 +2,7 @@
 #define VIDEO_BLIT_H
 
 #include <SDL/SDL.h>
+#include <stdint.h>
 
 #define HOST_WIDTH_RESOLUTION sdl_screen->w
 #define HOST_HEIGHT_RESOLUTION sdl_screen->h
@@ -26,7 +27,11 @@ void Set_Video_Menu();
 void Set_Video_InGame();
 void Video_Close();
 void Update_Video_Menu();
-void Update_Video_Ingame(void);
+void Update_Video_Ingame(
+#ifdef FRAMESKIP
+	uint_fast8_t skip
+#endif
+);
 
 
 #endif

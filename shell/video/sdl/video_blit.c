@@ -147,8 +147,17 @@ void Update_Video_Menu()
 	SDL_Flip(sdl_screen);
 }
 
-void Update_Video_Ingame(void)
+void Update_Video_Ingame(
+#ifdef FRAMESKIP
+	uint_fast8_t skip
+#endif
+)
 {
-	scale_384x224_to_320x224((uint32_t*)sdl_screen->pixels + (320*4), (uint32_t*)vb_surface->pixels);
-	SDL_Flip(sdl_screen);
+#ifdef FRAMESKIP
+	if (!skip)
+#endif
+	{
+		scale_384x224_to_320x224((uint32_t*)sdl_screen->pixels + (320*4), (uint32_t*)vb_surface->pixels);
+		SDL_Flip(sdl_screen);
+	}
 }

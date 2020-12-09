@@ -139,7 +139,16 @@ void Update_Video_Menu()
 	SDL_Flip(sdl_screen);
 }
 
-void Update_Video_Ingame(void)
+void Update_Video_Ingame(
+#ifdef FRAMESKIP
+	uint_fast8_t skip
+#endif
+)
 {
-	SDL_Flip(sdl_screen);
+#ifdef FRAMESKIP
+	if (!skip)
+#endif
+	{
+		SDL_Flip(sdl_screen);
+	}
 }

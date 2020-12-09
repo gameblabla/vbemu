@@ -809,8 +809,12 @@ void Emulation_Run(void)
 
 	Audio_Write((int16_t*) sound_buf, spec.SoundBufSize);
 	audio_frames += spec.SoundBufSize;
-	Update_Video_Ingame();
-	
+	Update_Video_Ingame(
+#ifdef FRAMESKIP
+	spec.skip
+#endif
+);
+
 #ifdef FRAMESKIP
 	if (spec.skip == false) video_frames++;
 #else
