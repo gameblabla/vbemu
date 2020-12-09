@@ -755,6 +755,12 @@ void Emulation_Run(void)
 	static int16_t sound_buf[0x10000];
 	static MDFN_Rect rects[FB_MAX_HEIGHT];
 	rects[0].w = ~0;
+	
+#ifdef FORCE_FRAME_LIMIER
+	#define real_FPS (1000/MEDNAFEN_CORE_TIMING_FPS)
+	Uint64 start;
+	start = SDL_GetTicks();
+#endif
 
 	EmulateSpecStruct spec = {0};
 	spec.surface    = &surf;
@@ -777,6 +783,10 @@ void Emulation_Run(void)
 	//int16 *const SoundBuf = sound_buf + spec.SoundBufSizeALMS * EmulatedVB.soundchan;
 	//const int32 SoundBufMaxSize = spec.SoundBufMaxSize - spec.SoundBufSizeALMS;
 	spec.SoundBufSize = spec.SoundBufSizeALMS + (spec.SoundBufSize - spec.SoundBufSizeALMS);
+   
+#ifdef FORCE_FRAME_LIMIER
+	while (SDL_GetTicks() < real_FPS) SDL_Delay(real_FPS-(SDL_GetTicks()-start));
+#endif
    
 #ifdef FRAMESKIP
 	newTick = Timer_Read();

@@ -28,7 +28,7 @@
 #include "../masmem.h"
 #include "../state_helpers.h"
 
-static uint8 FB[2][0x6000];
+static uint8 FB[0x6000];
 static uint16 CHR_RAM[0x8000 / sizeof(uint16)];
 static uint16 DRAM[0x20000 / sizeof(uint16)];
 
@@ -139,7 +139,8 @@ static void MakeColorLUT(void)
 
 static void RecalcBrightnessCache(void)
 {
-   unsigned i, lr;
+   uint8 i;
+   unsigned lr;
    //printf("BRTA: %d, BRTB: %d, BRTC: %d, Rest: %d\n", BRTA, BRTB, BRTC, REST);
    int32 CumulativeTime = (BRTA + 1 + BRTB + 1 + BRTC + 1 + REST + 1) + 1;
    int32 MaxTime = 128;
@@ -200,7 +201,7 @@ static void RecalcBrightnessCache(void)
          BrightCLUT[lr][i] = ColorLUT[lr][BrightnessCache[i]];
 }
 
-static void Recalc3DModeStuff(bool non_rgb_output)
+static void Recalc3DModeStuff()
 {
    CopyFBColumnToTarget = CopyFBColumnToTarget_Anaglyph;
    RecalcBrightnessCache();
@@ -374,7 +375,7 @@ void VIP_Power(void)
    DPCTRL = 2;
    DisplayActive = false;
 
-   memset(FB, 0, 0x6000 * 2);
+   memset(FB, 0, 0x6000);
    memset(CHR_RAM, 0, 0x8000);
    memset(DRAM, 0, 0x20000);
 
@@ -651,7 +652,7 @@ uint8 VIP_Read8(int32 timestamp, uint32 A)
       case 0x0:
          if((A & 0x7FFF) >= 0x6000)
             return VIP_MA16R8(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000));
-         return FB[0][A & 0x7FFF];
+         return FB[A & 0x7FFF];
       case 0x2:
       case 0x3:
          return VIP_MA16R8(DRAM, A & 0x1FFFF);
@@ -687,9 +688,12 @@ uint16 VIP_Read16(int32 timestamp, uint32 A)
    {
       case 0x0:
       case 0x1:
-         if((A & 0x7FFF) >= 0x6000)
-            return VIP_MA16R16(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000));
-         return LoadU16_LE((uint16 *)&FB[(A >> 15) & 1][A & 0x7FFF]);
+			if((A & 0x7FFF) >= 0x6000)
+			{
+				return VIP_MA16R16(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000));
+			}
+			return LoadU16_LE((uint16 *)&FB[A & 0x7FFF]);
+			return 0;
       case 0x2:
       case 0x3:
          return VIP_MA16R16(DRAM, A & 0x1FFFF);
@@ -730,7 +734,7 @@ void VIP_Write8(int32 timestamp, uint32 A, uint8 V)
          if((A & 0x7FFF) >= 0x6000)
             VIP_MA16W8(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000), V);
          else
-            FB[(A >> 15) & 1][A & 0x7FFF] = V;
+			FB[A & 0x7FFF] = V;
          break;
 
       case 0x2:
@@ -786,8 +790,7 @@ void VIP_Write16(int32 timestamp, uint32 A, uint16 V)
       case 0x1:
          if((A & 0x7FFF) >= 0x6000)
             VIP_MA16W16(CHR_RAM, (A & 0x1FFF) | ((A >> 2) & 0x6000), V);
-         else
-            StoreU16_LE((uint16 *)&FB[(A >> 15) & 1][A & 0x7FFF], V);
+         else StoreU16_LE((uint16 *)&FB[A & 0x7FFF], V);
          break;
 
       case 0x2:
@@ -832,19 +835,13 @@ static bool skip;
 
 void VIP_StartFrame(EmulateSpecStruct *espec)
 {
-   espec->DisplayRect.x = 0;
-   espec->DisplayRect.y = 0;
-
-   espec->DisplayRect.w = 384;
-   espec->DisplayRect.h = 224;
-
    surface = espec->surface;
    skip = espec->skip;
    
    if(VidSettingsDirty)
    {
       MakeColorLUT();
-      Recalc3DModeStuff(espec->surface->format.colorspace != MDFN_COLORSPACE_RGB); 
+      Recalc3DModeStuff(); 
 	   
 	  memset(surface->pixels, 0, (384 * 224)*sizeof(WIDTH_TYPE));
 
@@ -868,11 +865,13 @@ static int32 CalcNextEvent(void)
 
 static INLINE void CopyFBColumnToTarget_Anaglyph_BASE(void)
 {
+	/* Don't render to the screen when VB is set to the second screen. Improves this function's speed by twice */
+	if (DisplayFB == 1) return;
+	
 	int y, y_sub;
-	const int fb = DisplayFB;
 	WIDTH_TYPE *target = surface->pixels   + Column;
 	const int32 pitchinpix = surface->pitchinpix;
-	const uint8 *fb_source = &FB[fb][64 * Column];
+	const uint8 *fb_source = &FB[64 * Column];
 
 	for(y = 56; y; y--)
 	{
@@ -925,21 +924,23 @@ v810_timestamp_t MDFN_FASTCALL VIP_Update(const v810_timestamp_t timestamp)
 
             if(!(skip && InstantDisplayHack && AllowDrawSkip))
             {
-				VIP_DrawBlock(DrawingBlock, DrawingBuffers + 8);
-				int x;
-				uint8 *FB_Target = FB[DrawingFB] + DrawingBlock * 2;
-				for(x = 0; x < 384; x++)
+				if (DisplayFB == 0) /* Same optimisation as in CopyFBColumnToTarget_Anaglyph_BASE, only render to the left eye. speeds up VIP_drawblock by 2x */
 				{
-                     FB_Target[64 * x + 0] = (DrawingBuffers[8 + x + 512 * 0] << 0)
-                        | (DrawingBuffers[8 + x + 512 * 1] << 2)
-                        | (DrawingBuffers[8 + x + 512 * 2] << 4)
-                        | (DrawingBuffers[8 + x + 512 * 3] << 6);
+					VIP_DrawBlock(DrawingBlock, DrawingBuffers + 8);
+					uint_fast32_t x;
+					uint8 *FB_Target = FB + DrawingBlock * 2;
+					for(x = 0; x < 384; x++)
+					{
+						 FB_Target[64 * x + 0] = (DrawingBuffers[8 + x + 512 * 0] << 0)
+							| (DrawingBuffers[8 + x + 512 * 1] << 2)
+							| (DrawingBuffers[8 + x + 512 * 2] << 4)
+							| (DrawingBuffers[8 + x + 512 * 3] << 6);
 
-                     FB_Target[64 * x + 1] = (DrawingBuffers[8 + x + 512 * 4] << 0) 
-                        | (DrawingBuffers[8 + x + 512 * 5] << 2)
-                        | (DrawingBuffers[8 + x + 512 * 6] << 4) 
-                        | (DrawingBuffers[8 + x + 512 * 7] << 6);
-
+						 FB_Target[64 * x + 1] = (DrawingBuffers[8 + x + 512 * 4] << 0) 
+							| (DrawingBuffers[8 + x + 512 * 5] << 2)
+							| (DrawingBuffers[8 + x + 512 * 6] << 4) 
+							| (DrawingBuffers[8 + x + 512 * 7] << 6);
+					}
 				}
             }
 
@@ -1078,7 +1079,7 @@ int VIP_StateAction(StateMem *sm, int load, int data_only)
 {
    SFORMAT StateRegs[] =
    {
-      SFARRAY(FB[0], 0x6000 * 2),
+      SFARRAY(FB, 0x6000),
       SFARRAY16(CHR_RAM, 0x8000 / sizeof(uint16)),
       SFARRAY16(DRAM, 0x20000 / sizeof(uint16)),
 

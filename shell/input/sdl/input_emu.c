@@ -30,9 +30,6 @@ uint16_t Read_Input(void)
 			case SDL_KEYDOWN:
 				switch(event.key.keysym.sym)
 				{
-#ifdef GKD350_BUG_INPUT
-					case SDLK_LSHIFT:
-#endif
 					case SDLK_RCTRL:
 					case SDLK_END:
 						emulator_state = 1;
