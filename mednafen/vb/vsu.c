@@ -75,7 +75,7 @@ static const unsigned int Tap_LUT[8] = { 15 - 1, 11 - 1, 14 - 1, 5 - 1, 9 - 1, 7
 
 void VSU_Init(Blip_Buffer *_bb_l, Blip_Buffer *_bb_r)
 {
-   unsigned ch, lr;
+   uint_fast8_t ch, lr;
 
    bb_l    = _bb_l;
    bb_r    = _bb_r;
@@ -90,7 +90,7 @@ void VSU_Init(Blip_Buffer *_bb_l, Blip_Buffer *_bb_r)
 
 void VSU_Power(void)
 {
-   unsigned ch;
+   uint_fast8_t ch;
 
    SweepControl = 0;
    SweepModCounter = 0;
@@ -156,7 +156,7 @@ void VSU_Write(int32 timestamp, uint32 A, uint8 V)
       {
          if(A == 0x580 && (V & 1))
          {
-            int i;
+            uint_fast8_t i;
             //puts("STOP, HAMMER TIME");
             for(i = 0; i < 6; i++)
                IntlControl[i] &= ~0x80;
@@ -333,9 +333,6 @@ void VSU_Update(int32 timestamp)
                   chunk_clocks = FreqCounter[ch];
             }
          }
-
-         if(ch == 5 && chunk_clocks > NoiseLatcherClockDivider)
-            chunk_clocks = NoiseLatcherClockDivider;
 
          FreqCounter[ch] -= chunk_clocks;
          while(FreqCounter[ch] <= 0)
