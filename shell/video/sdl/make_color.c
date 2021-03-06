@@ -4,7 +4,7 @@
 
 SDL_Color colors[256];
 
-extern SDL_Surface * sdl_screen;
+extern SDL_Surface * sdl_screen, *vb_surface;
 
 static void Set_Red(uint8_t r, uint16_t entry)
 {
@@ -25,6 +25,7 @@ void Set_VB_palette(void)
 		Set_Red(86-i, (i*4)+3);
 	}
 	SDL_SetPalette(sdl_screen, SDL_LOGPAL|SDL_PHYSPAL, colors, 0, 256);
+	SDL_SetPalette(vb_surface, SDL_LOGPAL|SDL_PHYSPAL, colors, 0, 256);
 }
 
 

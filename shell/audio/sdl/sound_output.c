@@ -1,7 +1,4 @@
-#include <sys/ioctl.h>
 #include <stdint.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <SDL/SDL.h>
 
 #include "sound_output.h"

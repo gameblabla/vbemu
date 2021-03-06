@@ -9,11 +9,11 @@
 extern int32_t screen_width;
 //#define setPixel(buffer, x,y,c) 
 
-static inline void setPixel(uint16_t* buffer, uint32_t x, uint32_t y, uint16_t c)
+static inline void setPixel(BPP_BITDEPTH* buffer, uint32_t x, uint32_t y, BPP_BITDEPTH c)
 {
 	if (x < BACKBUFFER_WIDTH_RESOLUTION && y < BACKBUFFER_HEIGHT_RESOLUTION)
 	{
-		*((uint16_t*)buffer + ((x) + (y) * BACKBUFFER_WIDTH_RESOLUTION)) = c;
+		*((BPP_BITDEPTH*)buffer + ((x) + (y) * BACKBUFFER_WIDTH_RESOLUTION)) = c;
 	}
 }
 
@@ -82,7 +82,7 @@ static int32_t isOutlinePixel(uint8_t* charfont, uint32_t x, uint32_t y)
 	}
 }
 
-static void drawChar(uint16_t* buffer, uint32_t *x, uint32_t *y, uint32_t margin, char ch, uint16_t fc, uint16_t olc)
+static void drawChar(BPP_BITDEPTH* buffer, uint32_t *x, uint32_t *y, uint32_t margin, char ch, BPP_BITDEPTH fc, BPP_BITDEPTH olc)
 {
 	uint32_t i, j;
 	uint8_t *charSprite;
@@ -113,7 +113,7 @@ static void drawChar(uint16_t* buffer, uint32_t *x, uint32_t *y, uint32_t margin
 	}
 }
 
-static void drawString(uint16_t* buffer, uint32_t *x, uint32_t *y, uint32_t _x, const char *str, uint16_t fc, uint16_t olc)
+static void drawString(BPP_BITDEPTH* buffer, uint32_t *x, uint32_t *y, uint32_t _x, const char *str, BPP_BITDEPTH fc, BPP_BITDEPTH olc)
 {
 	uint32_t i;
 	size_t size_font;
@@ -123,7 +123,7 @@ static void drawString(uint16_t* buffer, uint32_t *x, uint32_t *y, uint32_t _x, 
 		drawChar(buffer, x, y, _x, str[i], fc, olc);
 }
 
-void print_string(const char *s, const uint16_t fg_color, const uint16_t bg_color, uint32_t x, uint32_t y, uint16_t* buffer) 
+void print_string(const char *s, const BPP_BITDEPTH fg_color, const BPP_BITDEPTH bg_color, uint32_t x, uint32_t y, BPP_BITDEPTH* buffer) 
 {
 	if (!s) return;
 	

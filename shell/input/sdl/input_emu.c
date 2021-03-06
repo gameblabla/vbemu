@@ -32,6 +32,10 @@ uint16_t Read_Input(void)
 				{
 					case SDLK_RCTRL:
 					case SDLK_END:
+					case SDLK_PAGEUP:
+					case SDLK_1:
+					case SDLK_F1:
+					case SDLK_p:
 						emulator_state = 1;
 					break;
 					default:

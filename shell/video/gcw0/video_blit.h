@@ -15,10 +15,18 @@ extern SDL_Surface *sdl_screen, *backbuffer;
 extern uint32_t width_of_surface;
 #if defined(WANT_32BPP)
 extern uint32_t* __restrict__ internal_pix;
+#define BPP_TOSET 32
+#define BPP_BITDEPTH uint32_t
 #elif defined(WANT_16BPP)
 extern uint16_t* __restrict__ internal_pix;
+#define BPP_TOSET 16
+#define BPP_BITDEPTH uint16_t
 #elif defined(WANT_8BPP)
 extern uint8_t* __restrict__ internal_pix;
+#define BPP_TOSET 8
+#define BPP_BITDEPTH uint8_t
+#else
+#error "Bitdepth not defined, SAD!"
 #endif
 
 

@@ -924,7 +924,10 @@ int main(int argc, char* argv[])
 	int isloaded;
 	
 	printf("Starting VB-BoyEmu\n");
-    
+   
+#ifdef CLASSICMAC
+	snprintf(GameName_emu, sizeof(GameName_emu), "rom.vb");
+#else
 	if (argc < 2)
 	{
 		printf("Specify a ROM to load in memory\n");
@@ -932,11 +935,15 @@ int main(int argc, char* argv[])
 	}
 	
 	snprintf(GameName_emu, sizeof(GameName_emu), "%s", basename(argv[1]));
-
+#endif
 	Init_Video();
 	Audio_Init();
 	
+#ifdef CLASSICMAC
+	isloaded = Load_Game_Memory("rom.vb");
+#else
 	isloaded = Load_Game_Memory(argv[1]);
+#endif
 	if (!isloaded)
 	{
 		printf("Could not load ROM in memory\n");

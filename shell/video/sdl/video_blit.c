@@ -38,19 +38,15 @@ SDL_Surface *sdl_screen, *backbuffer, *vb_surface;
 #endif
 
 /* GCW0 : Triple buffering causes flickering, for some reasons... */
-
 #if defined(WANT_32BPP)
 #define SDL_FLAGS SDL_HWSURFACE | SDL_DOUBLEBUF
 uint32_t* __restrict__ internal_pix;
-#define BPP_TOSET 32
 #elif defined(WANT_16BPP)
 #define SDL_FLAGS SDL_HWSURFACE | SDL_TRIPLEBUF
 uint16_t* __restrict__ internal_pix;
-#define BPP_TOSET 16
 #elif defined(WANT_8BPP)
 #define SDL_FLAGS SDL_HWSURFACE | SDL_HWPALETTE
 uint8_t* __restrict__ internal_pix;
-#define BPP_TOSET 8
 #endif
 
 #ifdef ENABLE_JOYSTICKCODE
@@ -75,7 +71,7 @@ void Init_Video()
 
 	SDL_ShowCursor(0);
 
-	backbuffer = SDL_CreateRGBSurface(SDL_SWSURFACE, 320, 240, 16, 0,0,0,0);
+	backbuffer = SDL_CreateRGBSurface(SDL_SWSURFACE, 320, 240, BPP_TOSET, 0,0,0,0);
 	vb_surface = SDL_CreateRGBSurface(SDL_SWSURFACE, 384, 224, BPP_TOSET, 0,0,0,0);
 
 	Set_Video_InGame();
@@ -87,7 +83,7 @@ void Set_Video_Menu()
 	 * It could be an issue with the old SDL version that we are using..
 	 * I don't know. We need to compare it against the GCW0's SDL.
 	 * */
-	sdl_screen = SDL_SetVideoMode(320, 240, 16, SDL_FLAGS);
+	sdl_screen = SDL_SetVideoMode(320, 240, BPP_TOSET, SDL_FLAGS);
 	
 	SDL_FillRect(sdl_screen, NULL, 0);
 	SDL_Flip(sdl_screen);
@@ -149,6 +145,10 @@ void Update_Video_Menu()
 
 void Update_Video_Ingame()
 {
+	#if WANT_32BPP || WANT_8BPP
+	SDL_SoftStretch(vb_surface, NULL, sdl_screen, NULL);
+	#else
 	scale_384x224_to_320x224((uint32_t*)sdl_screen->pixels + (320*4), (uint32_t*)vb_surface->pixels);
+	#endif
 	SDL_Flip(sdl_screen);
 }

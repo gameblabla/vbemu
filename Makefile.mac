@@ -1,0 +1,49 @@
+# path to RETRO68
+PREFIX=$(RETRO68)/powerpc-apple-macos
+CC=$(RETRO68)/bin/powerpc-apple-macos-gcc
+CXX=$(RETRO68)/bin/powerpc-apple-macos-g++
+REZ=$(RETRO68)/bin/Rez
+
+SDL_INCLUDE=$(PREFIX)/include/SDL
+
+PORT = sdl
+SOUND_ENGINE = sdl
+
+INCLUDES	= -Ilibretro-common/include -Isrc
+INCLUDES	+= -Ishell/headers -Ishell/video/$(PORT) -Ishell/audio -Ishell/scalers -Ishell/input/sdl -Ishell/fonts -Ishell/menu
+INCLUDES	+= -Imednafen -I./mednafen/vb -I./mednafen/sound -I. -Ishell/emu -Imednafen/include -Ishell/input -Imednafen/video
+
+DEFINES		= -DMSB_FIRST -DINLINE="inline" -DINLINE="inline" -DNDEBUG -DWANT_STEREO_SOUND -DFASTBUILD
+DEFINES		+= -DMEDNAFEN_VERSION_NUMERIC=931
+DEFINES		+= -DWANT_8BPP -DFRONTEND_SUPPORTS_RGB565 -DCLASSICMAC -DARCH_POWERPC
+
+CFLAGS = $(INCLUDES) -D__MACOS__ $(DEFINES) -O1 -fdata-sections -ffunction-sections -I$(SDL_INCLUDE) -DMEDNAFEN_VERSION_NUMERIC=931
+CXXFLAGS = $(CFLAGS)
+
+LDFLAGS=-lRetroConsole -lm  -lSDL -lDialogsLib -Wl,--as-needed -Wl,--gc-sections 
+RINCLUDES=$(PREFIX)/RIncludes
+REZFLAGS=-I$(RINCLUDES)
+	
+# Files to be compiled
+SRCDIR 		=  ./src ./shell ./shell/scalers ./shell/emu ./shell/menu
+SRCDIR		+= ./shell/input/sdl/ ./shell/video/$(PORT) ./shell/audio/$(SOUND_ENGINE)
+SRCDIR		+= ./mednafen ./mednafen/vb ./mednafen/sound ./mednafen/hw_cpu/v810 ./mednafen/hw_cpu/v810/fpu-new
+
+VPATH		= $(SRCDIR)
+SRC_C		= $(foreach dir, $(SRCDIR), $(wildcard $(dir)/*.c))
+OBJ_C		= $(notdir $(patsubst %.c, %.o, $(SRC_C)))
+OBJS		= $(OBJ_C) $(OBJ_CPP)
+	
+CFLAGS += $(DEFS)
+
+HelloWorld.bin HelloWorld.APPL HelloWorld.dsk: HelloWorld.xcoff
+	MakePEF HelloWorld.xcoff -o HelloWorld.pef
+	$(REZ) $(REZFLAGS) ./SDL.r -I$(RINCLUDES) -DCFRAG_NAME="\"HelloWorld\"" -o HelloWorld.bin --cc HelloWorld.dsk --cc HelloWorld.APPL --cc %HelloWorld.ad -t APPL -c ???? --data HelloWorld.pef
+
+
+HelloWorld.xcoff: $(OBJS)
+	$(CXX) $(CXXFLAGS) $(OBJS) -o $@ $(LDFLAGS)	# C++ used for linking because RetroConsole needs it
+
+.PHONY: clean
+clean:
+	rm -f HelloWorld.bin HelloWorld.APPL HelloWorld.dsk HelloWorld.xcoff HelloWorld.xcoff.gdb $(OBJS)
