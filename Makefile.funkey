@@ -1,0 +1,75 @@
+PRGNAME     = vb.elf
+CC          = /opt/funkey-toolchain/bin/arm-linux-gcc
+CXX 		= /opt/funkey-toolchain/bin/arm-linux-g++
+
+#### Configuration
+
+# Possible values : retrostone, rs97, rs90
+PORT = funkey
+# Possible values : alsa, oss, portaudio
+SOUND_ENGINE = alsa
+
+PROFILE = 0
+
+#### End of Configuration
+
+GIT_VERSION := " $(shell git rev-parse --short HEAD || echo unknown)"
+
+INCLUDES	= -Ilibretro-common/include -Isrc
+INCLUDES	+= -Ishell/headers -Ishell/video/$(PORT) -Ishell/audio -Ishell/scalers -Ishell/input/sdl -Ishell/fonts -Ishell/menu
+INCLUDES	+= -Imednafen -I./mednafen/vb -I./mednafen/sound -I. -Ishell/emu -Imednafen/include -Ishell/input -Imednafen/video
+
+DEFINES		= -DLSB_FIRST -DINLINE="inline" -DINLINE="inline" -DNDEBUG -DWANT_STEREO_SOUND -DFASTBUILD
+DEFINES		+= -DMEDNAFEN_VERSION_NUMERIC=931
+DEFINES		+= -DWANT_16BPP -DFRONTEND_SUPPORTS_RGB565 -DFUNKEY
+
+CFLAGS		= -Ofast -fsingle-precision-constant -fno-PIC -flto -fno-common -Wall -Wextra -Wunused-value $(INCLUDES) $(DEFINES)
+ifeq ($(PROFILE), YES)
+CFLAGS 		+= -fprofile-generate=/mnt/vb_profile
+endif
+ifeq ($(PROFILE), APPLY)
+CFLAGS 		+= -fprofile-use
+endif
+CFLAGS		+= -march=armv7-a+neon-vfpv4 -mtune=cortex-a7 -mfpu=neon-vfpv4
+CFLAGS		+= -fdata-sections -ffunction-sections -fsingle-precision-constant -freorder-functions -fno-math-errno -fgcse-las -fgcse-sm -fmerge-all-constants
+CXXFLAGS	= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
+LDFLAGS     = -nodefaultlibs -lc -lgcc -lm -lSDL -lasound -lz -pthread -Wl,-z,norelro -Wl,--hash-style=gnu -Wl,--build-id=none -Wl,-O1,--sort-common,--as-needed,--gc-sections -flto -no-pie -s
+
+ifeq ($(PROFILE), YES)
+LDFLAGS 		+= -lgcov
+endif
+
+ifeq ($(SOUND_ENGINE), alsa)
+LDFLAGS 		+= -lasound
+endif
+ifeq ($(SOUND_ENGINE), portaudio)
+LDFLAGS 		+= -lasound -lportaudio
+endif
+ifeq ($(SOUND_ENGINE), pulse)
+LDFLAGS 		+= -lpulse-simple -lportaudio
+endif
+
+# Files to be compiled
+SRCDIR 		=  ./src ./shell ./shell/scalers ./shell/emu ./shell/menu
+SRCDIR		+= ./shell/input/sdl/ ./shell/video/$(PORT) ./shell/audio/$(SOUND_ENGINE)
+SRCDIR		+= ./mednafen ./mednafen/vb ./mednafen/sound ./mednafen/hw_cpu/v810 ./mednafen/hw_cpu/v810/fpu-new
+
+VPATH		= $(SRCDIR)
+SRC_C		= $(foreach dir, $(SRCDIR), $(wildcard $(dir)/*.c))
+SRC_CPP		= $(foreach dir, $(SRCDIR), $(wildcard $(dir)/*.cpp))
+OBJ_C		= $(notdir $(patsubst %.c, %.o, $(SRC_C)))
+OBJ_CPP		= $(notdir $(patsubst %.cpp, %.o, $(SRC_CPP)))
+OBJS		= $(OBJ_C) $(OBJ_CPP)
+
+# Rules to make executable
+$(PRGNAME): $(OBJS)  
+	$(CC) $(CFLAGS) -std=gnu99 -o $(PRGNAME) $^ $(LDFLAGS)
+	
+$(OBJ_CPP) : %.o : %.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	
+$(OBJ_C) : %.o : %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+	
+clean:
+	rm -f $(PRGNAME)$(EXESUFFIX) *.o

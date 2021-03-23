@@ -33,6 +33,12 @@ static uint8_t save_slot = 0;
 #endif
 ;*/
 
+#ifdef FUNKEY
+#define MENU_CONFIG_OFFSET_X 43
+#else
+#define MENU_CONFIG_OFFSET_X 0
+#endif
+
 static void SaveState_Menu(uint_fast8_t load_mode, uint_fast8_t slot)
 {
 	char tmp[512];
@@ -139,19 +145,19 @@ static const char* Return_Text_Button(uint32_t button)
 	{
 		/* UP button */
 		case 273:
-			return "DPAD UP";
+			return "D-UP";
 		break;
 		/* DOWN button */
 		case 274:
-			return "DPAD DOWN";
+			return "D-DOWN";
 		break;
 		/* LEFT button */
 		case 276:
-			return "DPAD LEFT";
+			return "D-LEFT";
 		break;
 		/* RIGHT button */
 		case 275:
-			return "DPAD RIGHT";
+			return "D-RIGHT";
 		break;
 		/* A button */
 		case 306:
@@ -298,8 +304,8 @@ static void Input_Remapping()
 
         if (currentselection > 14) currentselection = 14;
 
-		print_string("Press [A] to map to a button", TextWhite, TextBlue, 50, 210, backbuffer->pixels);
-		print_string("Press [B] to Exit", TextWhite, TextBlue, 85, 225, backbuffer->pixels);
+		print_string("Press [A] to map to a button", TextWhite, TextBlue, 5, 210, backbuffer->pixels);
+		print_string("Press [B] to Exit", TextWhite, TextBlue, 5, 225, backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "UP   : %s\n", Return_Text_Button(option.config_buttons[0]));
 		if (currentselection == 1) print_string(text, TextRed, 0, 5, 25+2, backbuffer->pixels);
@@ -334,28 +340,28 @@ static void Input_Remapping()
 		else print_string(text, TextWhite, 0, 5, 165+2, backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "START  : %s\n", Return_Text_Button(option.config_buttons[8]));
-		if (currentselection == 9) print_string(text, TextRed, 0, 165, 25+2, backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 25+2, backbuffer->pixels);
+		if (currentselection == 9) print_string(text, TextRed, 0, 165-MENU_CONFIG_OFFSET_X, 25+2, backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165-MENU_CONFIG_OFFSET_X, 25+2, backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "SELECT : %s\n", Return_Text_Button(option.config_buttons[9]));
-		if (currentselection == 10) print_string(text, TextRed, 0, 165, 45+2, backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 45+2, backbuffer->pixels);
+		if (currentselection == 10) print_string(text, TextRed, 0, 165-MENU_CONFIG_OFFSET_X, 45+2, backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165-MENU_CONFIG_OFFSET_X, 45+2, backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "D2-UP  : %s\n", Return_Text_Button(option.config_buttons[10]));
-		if (currentselection == 11) print_string(text, TextRed, 0, 165, 65+2, backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 65+2, backbuffer->pixels);
+		if (currentselection == 11) print_string(text, TextRed, 0, 165-MENU_CONFIG_OFFSET_X, 65+2, backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165-MENU_CONFIG_OFFSET_X, 65+2, backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "D2-DOWN : %s\n", Return_Text_Button(option.config_buttons[11]));
-		if (currentselection == 12) print_string(text, TextRed, 0, 165, 85+2, backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 85+2, backbuffer->pixels);
+		if (currentselection == 12) print_string(text, TextRed, 0, 165-MENU_CONFIG_OFFSET_X, 85+2, backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165-MENU_CONFIG_OFFSET_X, 85+2, backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "D2-LEFT  : %s\n", Return_Text_Button(option.config_buttons[12]));
-		if (currentselection == 13) print_string(text, TextRed, 0, 165, 105+2, backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 105+2, backbuffer->pixels);
+		if (currentselection == 13) print_string(text, TextRed, 0, 165-MENU_CONFIG_OFFSET_X, 105+2, backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165-MENU_CONFIG_OFFSET_X, 105+2, backbuffer->pixels);
 
 		snprintf(text, sizeof(text), "D2-RIGHT : %s\n", Return_Text_Button(option.config_buttons[13]));
-		if (currentselection == 14) print_string(text, TextRed, 0, 165, 125+2, backbuffer->pixels);
-		else print_string(text, TextWhite, 0, 165, 125+2, backbuffer->pixels);
+		if (currentselection == 14) print_string(text, TextRed, 0, 165-MENU_CONFIG_OFFSET_X, 125+2, backbuffer->pixels);
+		else print_string(text, TextWhite, 0, 165-MENU_CONFIG_OFFSET_X, 125+2, backbuffer->pixels);
 
 		Update_Video_Menu();
 	}
