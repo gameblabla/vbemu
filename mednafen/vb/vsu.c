@@ -119,9 +119,12 @@ void VSU_Power(void)
       LatcherClockDivider[ch] = 120;
    }
 
+   ModWavePos = 0;
 
    NoiseLatcherClockDivider = 120;
    NoiseLatcher = 0;
+   
+   lfsr = 0;
 
    memset(WaveData, 0, sizeof(WaveData));
    memset(ModData, 0, sizeof(ModData));
@@ -131,6 +134,9 @@ void VSU_Power(void)
 
 void VSU_Write(int32 timestamp, uint32 A, uint8 V)
 {
+   /* VB: Block writes to VSU registers and memories when A0 and A1 are not both 0, per tip from "enthusi".*/
+   if(MDFN_UNLIKELY(A & 0x3)) return;
+
    A &= 0x7FF;
 
    VSU_Update(timestamp);
