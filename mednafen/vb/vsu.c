@@ -439,21 +439,9 @@ void VSU_Update(int32 timestamp)
                            if(ModWavePos < 32 || (EnvControl[ch] & 0x2000))
                            {
                               ModWavePos &= 0x1F;
-
-                              EffFreq[ch] = (EffFreq[ch] + (int8)ModData[ModWavePos]);
-                              if(EffFreq[ch] < 0)
-                              {
-                                 //puts("Underflow");
-                                 EffFreq[ch] = 0;
-                              }
-                              else if(EffFreq[ch] > 0x7FF)
-                              {
-                                 //puts("Overflow");
-                                 EffFreq[ch] = 0x7FF;
-                              }
+							  EffFreq[ch] = (Frequency[ch] + (int8)ModData[ModWavePos]) & 0x7FF;
                               ModWavePos++;
                            }
-                           //puts("Mod");
                         }
                         else				// Sweep
                         {
