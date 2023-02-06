@@ -8,7 +8,7 @@ PORT = gcw0
 # Possible values : alsa, oss, portaudio
 SOUND_ENGINE = sdl
 
-PROFILE = 0
+PROFILE = APPLY
 HUGE_PAGES = 1
 
 #### End of Configuration
@@ -29,11 +29,12 @@ CFLAGS		+= -mlong32 -mno-xgot -fsection-anchors -fno-builtin
 CFLAGS		+= -fno-math-errno -fgcse-las -fgcse-sm -fmerge-all-constants -fno-ident -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables
 CFLAGS		+= -freorder-functions
 CFLAGS		+= -fipa-pta -fsection-anchors -fdelete-dead-exceptions  -freorder-functions
+CFLAGS		+= -finline-limit=42 -fno-unroll-loops -fno-ipa-cp -ffast-math -fipa-pta
 
 ifeq ($(PROFILE), YES)
-CFLAGS 		+= -fprofile-generate=/usr/local/home
+CFLAGS 		+= -fprofile-generate=/media/data/local/home/vb_gcda
 else ifeq ($(PROFILE), APPLY)
-CFLAGS		+= -fprofile-use -fbranch-probabilities
+CFLAGS		+= -fprofile-use="." -fbranch-probabilities
 endif
 LDFLAGS     = -nodefaultlibs -lc -lgcc -lm -lSDL -Wl,-z,norelro -Wl,--hash-style=gnu -Wl,--build-id=none -Wl,-O1,--sort-common,--as-needed,--gc-sections -flto -no-pie -s
 
